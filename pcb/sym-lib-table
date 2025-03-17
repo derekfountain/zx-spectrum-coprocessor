@@ -1,0 +1,6 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "rp2350")(type "KiCad")(uri "${KIPRJMOD}/rp2xxx_stamp_footprints/KiCad/RP2xxx_Stamp.kicad_sym")(options "")(descr ""))
+  (lib (name "zxbus")(type "Legacy")(uri "${KIPRJMOD}/zxbus.lib")(options "")(descr ""))
+  (lib (name "pmbt2222a")(type "KiCad")(uri "${KIPRJMOD}/pmbt2222a.kicad_sym")(options "")(descr ""))
+)
