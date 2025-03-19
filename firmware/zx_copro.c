@@ -50,7 +50,7 @@
  * A test program, z80 machine code, expected to be ORGed at 0x8000.
  * Use xxd to create the header file, for example:
  *   > zcc +zx -vn -startup=5 -clib=sdcc_iy z80_image.c -o z80_image
- *   > xxd -i z80_image_CODE.bin > ../../../firmware/z80_image.h
+ *   > xxd -i -c 16 z80_image_CODE.bin > ../../../firmware/z80_image.h
  */
 #include "z80_image.h"
 #endif
@@ -83,8 +83,8 @@ typedef struct _DMA_QUEUE_ENTRY
 }
 DMA_QUEUE_ENTRY;
 
+/* Not sure if this queue idea is going anywhere yet */
 static DMA_QUEUE_ENTRY dma_queue[1] = {0};
-
 void add_dma_to_queue( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
 {
   dma_queue[0].src             = src;
@@ -134,7 +134,7 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
     gpio_put( GPIO_Z80_MREQ, 0 );
 
     /* Put value on the data bus */
-    gpio_put_masked( GPIO_DBUS_BITMASK, *(src+byte_counter) & 0xFF );
+    gpio_put_masked( GPIO_DBUS_BITMASK, *(src+byte_counter) );
 
     /*
      * Assert the write line to write it, the ULA responds to this and does
@@ -260,6 +260,9 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
     __asm volatile ("nop");
 #endif
 
+  /* Update local mirror to match the ZX RAM */
+  zx_memory_mirror[write_address+byte_counter] = *(src+byte_counter);
+
     /* Remove write and memory request */
     gpio_put( GPIO_Z80_WR,   1 );
     gpio_put( GPIO_Z80_MREQ, 1 ); 
@@ -283,21 +286,16 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
   return;
 }
 
-static uint32_t xfred = 1;
 
+/* Test routine, called on alarm a few secs after the zx has booted up */
 int64_t copy_test_program( alarm_id_t id, void *user_data )
 {
-  xfred = 0;
-#ifdef USE_TEST_IMAGEXXX
-// This isn't right, the mirror needs updating when the DMA happens
-  memcpy( zx_memory_mirror+0x8000, z80_image_CODE_bin, z80_image_CODE_bin_len );
-
+#ifdef USE_TEST_IMAGE
   add_dma_to_queue( z80_image_CODE_bin, 0x8000, z80_image_CODE_bin_len );
 #endif
 
   return 0;
 }
-
 
 
 void main( void )
@@ -451,19 +449,12 @@ void main( void )
 
     }
 
-    if( xfred == 0 )
-    {
-      dma_memory_block( z80_image_CODE_bin, 32768, z80_image_CODE_bin_len );
-      xfred = 1;
-    }
-
-#if 0
     if( dma_queue[0].src != NULL )
     {
       dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length );
       dma_queue[0].src = NULL;
     }
-#endif
+
   }
 
 }
