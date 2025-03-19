@@ -370,6 +370,9 @@ void main( void )
 
   /* The DMA stuff starts in a few seconds */
   add_alarm_in_ms( 3000, copy_test_program, NULL, 0 );
+
+#define RESET_INSTRUCTION_COUNTER 200
+  uint32_t start_test_image = 0;
 #endif
 
   /* Let the Spectrum run */
@@ -390,10 +393,13 @@ void main( void )
     /* A memory read is when mem-request and read are both low */
     const uint64_t RD_MREQ_MASK = (0x01 << GPIO_Z80_MREQ) | (0x01 << GPIO_Z80_RD);
 
+    /* A memory read is when mem-request and read are both low */
+    const uint64_t Z80_IN_RESET_MASK = ((uint64_t)0x01 << GPIO_Z80_RESET);
+
     /* Pick up the address being accessed */
     register uint64_t address = (gpios & GPIO_ABUS_BITMASK) >> GPIO_ABUS_A0;
 
-    /* Note this will trigger is another core is doing DMA */
+    /* Note this will trigger if another core is doing DMA */
     if( (gpios & WR_MREQ_MASK) == 0 )
     {
       /* Ignore writes to ROM */
@@ -416,6 +422,16 @@ void main( void )
         /* Pick up ROM byte from local mirror */
         uint8_t data = zx_memory_mirror[address];
 
+#ifdef USE_TEST_IMAGE
+        /* Inject JP 0x8000 into bytes 0, 1 and 2 to force a jump to the test code */
+        if( start_test_image )
+        {
+          if(      address == 0 ) data = 0xc3;
+          else if( address == 1 ) data = 0x00;
+          else if( address == 2 ) data = 0x80;
+        }
+#endif
+
         /* Set the data bus to outputs */
         gpio_set_dir_out_masked( GPIO_DBUS_BITMASK );
 
@@ -430,6 +446,32 @@ void main( void )
       }
       else
       {
+#ifdef USE_TEST_IMAGE
+        /*
+         * Bit of a problem here. If the test image is in use, it will have
+         * been DMAed to 0x8000 and the Z80 reset. The first 3 bytes of the
+         * ROM will have been tweaked to make a JP 0x8000 to start the test
+         * program. Now I want to remove the tweaked JP instruction.
+         * The issue is that when the Spectrum resets it actually resets
+         * several times. It jumps to 0x0000, runs a few instructions, then
+         * jumps back to 0x0000 and does it again. It's arbitrary, but I think
+         * it's caused by jitter on the reset line as C27 charges up.
+         * But that leaves the question of how I know when it's safe to put
+         * the original ROM bytes back. If I just look for address 0x8000 on
+         * the address bus, that works, but if there's then another jittery
+         * reset and the JP 0x8000 has been removed the normal boot will
+         * happen. So how do I know when the jitters have finished and the
+         * test code is really running?
+         * The answer might be to count instructions executed or something,
+         * but for now I'm just going to ignore the problem and leave the
+         * JP 0x8000 in place. If this proves to be a problem I'll come back
+         * to it. It's only a test convenience after all.
+         */
+        if( start_test_image )
+        {
+          /* Not sure what to do here. As some point I want to say start_test_image=0; */
+        }
+#endif
         /*
          * It's a read from RAM, the Spectrum's RAM chips will field it.
          * Just wait for the read to finish we don't loop continuously
@@ -446,13 +488,34 @@ void main( void )
        */
       while( (gpio_get_all64() & RD_MREQ_MASK) == 0 );        
 #endif        
-
     }
 
+    /*
+     * If there's something in the DMA queue, activate it while we're
+     * between ROM reads. I think this might need to go onto the other
+     * core at some point.
+     */
     if( dma_queue[0].src != NULL )
     {
       dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length );
       dma_queue[0].src = NULL;
+
+#ifdef USE_TEST_IMAGE
+#if EMULATE_ROM
+      /*
+       * If we're using the Z80 test code and emulating the ROM, reset the Z80
+       * and set the flag which causes the JP 0x8000 at the start of the
+       * emulated ROM.
+       * This isn't really correct, the memory blocked DMAed above might not be
+       * the test code, it might be something else. This all needs working out.
+       */
+      start_test_image = 1;
+      
+      gpio_put( GPIO_RESET_Z80, 1 );
+      busy_wait_us_32( 100 );
+      gpio_put( GPIO_RESET_Z80, 0 );
+#endif
+#endif
     }
 
   }
