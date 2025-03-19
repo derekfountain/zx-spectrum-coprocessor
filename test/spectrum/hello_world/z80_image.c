@@ -1,6 +1,6 @@
 /*
  * zcc +zx -vn -startup=5 -clib=sdcc_iy z80_image.c -o z80_image
- * xxd -i z80_image_CODE.bin > ../../../firmware/z80_image.h
+ * xxd -i -c 16 z80_image_CODE.bin > ../../../firmware/z80_image.h
  */
 
 #include <input.h>

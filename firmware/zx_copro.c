@@ -92,6 +92,8 @@ void add_dma_to_queue( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
   dma_queue[0].length          = length;
 }
 
+/* Need to gate this so DMA doesn't happen if we're supplying/mirroring RAM? */
+static uint32_t dma_gate = 0;
 void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length ) 
 {
   /* Assert bus request */
@@ -132,7 +134,7 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
     gpio_put( GPIO_Z80_MREQ, 0 );
 
     /* Put value on the data bus */
-    gpio_put_masked( GPIO_DBUS_BITMASK, *(src+byte_counter) );
+    gpio_put_masked( GPIO_DBUS_BITMASK, *(src+byte_counter) & 0xFF );
 
     /*
      * Assert the write line to write it, the ULA responds to this and does
@@ -147,13 +149,13 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
      * takes one clock cycle, so 23 NOPs should guarantee a pause long
      * enough for the 4116s to respond.
      */
-#define USING_STATIC_RAM_MODULE 1
+#define USING_STATIC_RAM_MODULE 0
 #if USING_STATIC_RAM_MODULE
   /*
    * This was developed on a Spectrum containing a static RAM-based lower memory
    * module. I thought it would be faster than the 4116s, so should work with
    * fewer than 23 NOPs. Turns out it doesn't. Empirical testing shows it needs 29,
-   * which is 1.93e-07 seconds, or about 1.93 microseconds. It don't know why.
+   * which is 1.93e-07 seconds, or about 19 microseconds. It don't know why.
    * 
    * Update: it turns out that sometimes 29 is too few and the DMA doesn't work.
    * This appears to be related to the Spectrum's temperature. The cooler the
@@ -205,7 +207,57 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
     __asm volatile ("nop");
     __asm volatile ("nop");
 #else
-    /* Timings with 4116s go here */
+  /*
+   * This was developed on a Spectrum containing the original 4116 RAM.
+   * It turns out these need more time than the static memory module. As of
+   * this writing I've given up trying to predict or interpret what's going
+   * on with the timings. Empirical testing shows it needs 37 RP2350 cycles,
+   * which is 24.6 microseconds at 150MHz.
+   */
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
 #endif
 
     /* Remove write and memory request */
@@ -231,10 +283,13 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
   return;
 }
 
+static uint32_t xfred = 1;
 
 int64_t copy_test_program( alarm_id_t id, void *user_data )
 {
-#ifdef USE_TEST_IMAGE
+  xfred = 0;
+#ifdef USE_TEST_IMAGEXXX
+// This isn't right, the mirror needs updating when the DMA happens
   memcpy( zx_memory_mirror+0x8000, z80_image_CODE_bin, z80_image_CODE_bin_len );
 
   add_dma_to_queue( z80_image_CODE_bin, 0x8000, z80_image_CODE_bin_len );
@@ -340,6 +395,7 @@ void main( void )
     /* Pick up the address being accessed */
     register uint64_t address = (gpios & GPIO_ABUS_BITMASK) >> GPIO_ABUS_A0;
 
+    /* Note this will trigger is another core is doing DMA */
     if( (gpios & WR_MREQ_MASK) == 0 )
     {
       /* Ignore writes to ROM */
@@ -395,12 +451,19 @@ void main( void )
 
     }
 
+    if( xfred == 0 )
+    {
+      dma_memory_block( z80_image_CODE_bin, 32768, z80_image_CODE_bin_len );
+      xfred = 1;
+    }
+
+#if 0
     if( dma_queue[0].src != NULL )
     {
       dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length );
       dma_queue[0].src = NULL;
     }
-
+#endif
   }
 
 }
