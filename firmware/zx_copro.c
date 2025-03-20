@@ -39,21 +39,12 @@
 #include "hardware/clocks.h"
 #include "pico/multicore.h"
 
-#include <string.h>
+#include "rom_emulation.h"
+#include "zx_mirror.h"
+#include "z80_test_image.h"
 
-#include "rom.h"
 #include "gpios.h"
 
-#define USE_TEST_IMAGE
-#ifdef USE_TEST_IMAGE
-/*
- * A test program, z80 machine code, expected to be ORGed at 0x8000.
- * Use xxd to create the header file, for example:
- *   > zcc +zx -vn -startup=5 -clib=sdcc_iy z80_image.c -o z80_image
- *   > xxd -i -c 16 z80_image_CODE.bin > ../../../firmware/z80_image.h
- */
-#include "z80_image.h"
-#endif
 
 /* Using this messes up the DMA timings */
 //#define OVERCLOCK 270000
@@ -68,11 +59,7 @@ static void test_blipper( void )
   gpio_put( GPIO_BLIPPER1, 0 );
 }
 
-/*
- * Local copy of the ZX memory, 64K
- */
-#define ZX_MEMORY_SIZE           ((uint32_t)65536)
-static uint8_t zx_memory_mirror[ZX_MEMORY_SIZE];
+
 
 /* DMA queue */
 typedef struct _DMA_QUEUE_ENTRY
@@ -260,8 +247,8 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
     __asm volatile ("nop");
 #endif
 
-  /* Update local mirror to match the ZX RAM */
-  zx_memory_mirror[write_address+byte_counter] = *(src+byte_counter);
+    /* Update local mirror to match the ZX RAM */
+    put_zx_mirror_byte( write_address+byte_counter, *(src+byte_counter) );
 
     /* Remove write and memory request */
     gpio_put( GPIO_Z80_WR,   1 );
@@ -290,8 +277,8 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
 /* Test routine, called on alarm a few secs after the zx has booted up */
 int64_t copy_test_program( alarm_id_t id, void *user_data )
 {
-#ifdef USE_TEST_IMAGE
-  add_dma_to_queue( z80_image_CODE_bin, 0x8000, z80_image_CODE_bin_len );
+#if USE_Z80_TEST_IMAGE
+  add_dma_to_queue( get_z80_test_image_src(), get_z80_test_image_dest(), get_z80_test_image_length() );
 #endif
 
   return 0;
@@ -349,31 +336,25 @@ void main( void )
   gpio_init_mask( GPIO_ABUS_BITMASK );  gpio_set_dir_in_masked( GPIO_ABUS_BITMASK );
 
   /* Zero mirror memory */
-  for( uint32_t i=0; i < ZX_MEMORY_SIZE; i++ )
-    zx_memory_mirror[i]=0;
-
-  /* Copy the original ROM image into the Z80 memory mirror */
-  memcpy( zx_memory_mirror, _48_original_rom, _48_original_rom_len );
+  initialise_zx_mirror();
 
   /* Take over the ZX ROM */
-#define EMULATE_ROM 0
 #if EMULATE_ROM  
   /* We're emulating ROM, hold ROMCS permanently high */
   gpio_init( GPIO_ROMCS ); gpio_set_dir( GPIO_ROMCS, GPIO_OUT ); gpio_put( GPIO_ROMCS, 1 );
+  start_rom_emulation();
 #else
   /* Not emulating ROM, let the Spectrum's ROM chip do its normal thing */
   gpio_init( GPIO_ROMCS ); gpio_set_dir( GPIO_ROMCS, GPIO_IN ); // gpio_pull_up( GPIO_ROMCS );
 #endif
 
-#ifdef USE_TEST_IMAGE
-  dma_queue[0].src = NULL;
+  if( using_z80_test_image )
+  {
+    dma_queue[0].src = NULL;
 
-  /* The DMA stuff starts in a few seconds */
-  add_alarm_in_ms( 3000, copy_test_program, NULL, 0 );
-
-#define RESET_INSTRUCTION_COUNTER 200
-  uint32_t start_test_image = 0;
-#endif
+    /* The DMA stuff starts in a few seconds */
+    add_alarm_in_ms( 3000, copy_test_program, NULL, 0 );
+  }
 
   /* Let the Spectrum run */
   gpio_put( GPIO_RESET_Z80, 0 );
@@ -387,15 +368,6 @@ void main( void )
   {
     register uint64_t gpios = gpio_get_all64();
 
-    /* A memory write is when mem-request and write are both low */
-    const uint64_t WR_MREQ_MASK = (0x01 << GPIO_Z80_MREQ) | (0x01 << GPIO_Z80_WR);
-
-    /* A memory read is when mem-request and read are both low */
-    const uint64_t RD_MREQ_MASK = (0x01 << GPIO_Z80_MREQ) | (0x01 << GPIO_Z80_RD);
-
-    /* A memory read is when mem-request and read are both low */
-    const uint64_t Z80_IN_RESET_MASK = ((uint64_t)0x01 << GPIO_Z80_RESET);
-
     /* Pick up the address being accessed */
     register uint64_t address = (gpios & GPIO_ABUS_BITMASK) >> GPIO_ABUS_A0;
 
@@ -407,87 +379,11 @@ void main( void )
       {
         /* Pick the value being written from the data bus and mirror it */
         uint8_t data = (gpios & GPIO_DBUS_BITMASK) & 0xFF;
-        zx_memory_mirror[address] = data;
+        put_zx_mirror_byte( address, data );
       }
 
       /* Wait for the Z80 write to finish */
       while( (gpio_get_all64() & WR_MREQ_MASK) == 0 );
-    }
-    else if( (gpios & RD_MREQ_MASK) == 0 )
-    {
-#if EMULATE_ROM    
-      /* Ignore reads from anywhere other than ROM, the Spectrum still reads its own RAM */
-      if( address <= 0x3FFF )
-      {
-        /* Pick up ROM byte from local mirror */
-        uint8_t data = zx_memory_mirror[address];
-
-#ifdef USE_TEST_IMAGE
-        /* Inject JP 0x8000 into bytes 0, 1 and 2 to force a jump to the test code */
-        if( start_test_image )
-        {
-          if(      address == 0 ) data = 0xc3;
-          else if( address == 1 ) data = 0x00;
-          else if( address == 2 ) data = 0x80;
-        }
-#endif
-
-        /* Set the data bus to outputs */
-        gpio_set_dir_out_masked( GPIO_DBUS_BITMASK );
-
-        /* Write the value out to the Z80 */
-        gpio_put_masked64( GPIO_DBUS_BITMASK, (data & 0xFF) << GPIO_DBUS_D0 );
-      
-        /* Wait for the Z80's read to finish */
-        while( (gpio_get_all64() & RD_MREQ_MASK) == 0 );
-
-        /* Z80 has picked up the byte, put data bus back to inputs */
-        gpio_set_dir_in_masked( GPIO_DBUS_BITMASK );
-      }
-      else
-      {
-#ifdef USE_TEST_IMAGE
-        /*
-         * Bit of a problem here. If the test image is in use, it will have
-         * been DMAed to 0x8000 and the Z80 reset. The first 3 bytes of the
-         * ROM will have been tweaked to make a JP 0x8000 to start the test
-         * program. Now I want to remove the tweaked JP instruction.
-         * The issue is that when the Spectrum resets it actually resets
-         * several times. It jumps to 0x0000, runs a few instructions, then
-         * jumps back to 0x0000 and does it again. It's arbitrary, but I think
-         * it's caused by jitter on the reset line as C27 charges up.
-         * But that leaves the question of how I know when it's safe to put
-         * the original ROM bytes back. If I just look for address 0x8000 on
-         * the address bus, that works, but if there's then another jittery
-         * reset and the JP 0x8000 has been removed the normal boot will
-         * happen. So how do I know when the jitters have finished and the
-         * test code is really running?
-         * The answer might be to count instructions executed or something,
-         * but for now I'm just going to ignore the problem and leave the
-         * JP 0x8000 in place. If this proves to be a problem I'll come back
-         * to it. It's only a test convenience after all.
-         */
-        if( start_test_image )
-        {
-          /* Not sure what to do here. As some point I want to say start_test_image=0; */
-        }
-#endif
-        /*
-         * It's a read from RAM, the Spectrum's RAM chips will field it.
-         * Just wait for the read to finish we don't loop continuously
-         * while this read is on the Z80 control bus
-         */
-        while( (gpio_get_all64() & RD_MREQ_MASK) == 0 );        
-      }
-#else
-      /*
-       * We're not emulating ROM, and the Spectrum's RAM chips will field
-       * all RAM accesses, so there's nothing to do.
-       * Just wait for the read to finish we don't loop continuously
-       * while this read is on the Z80 control bus
-       */
-      while( (gpio_get_all64() & RD_MREQ_MASK) == 0 );        
-#endif        
     }
 
     /*
@@ -500,7 +396,7 @@ void main( void )
       dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length );
       dma_queue[0].src = NULL;
 
-#ifdef USE_TEST_IMAGE
+#if USE_Z80_TEST_IMAGE
 #if EMULATE_ROM
       /*
        * If we're using the Z80 test code and emulating the ROM, reset the Z80
@@ -509,7 +405,7 @@ void main( void )
        * This isn't really correct, the memory blocked DMAed above might not be
        * the test code, it might be something else. This all needs working out.
        */
-      start_test_image = 1;
+      set_initial_jp( 0x8000 );
       
       gpio_put( GPIO_RESET_Z80, 1 );
       busy_wait_us_32( 100 );

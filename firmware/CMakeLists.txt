@@ -10,11 +10,15 @@ pico_sdk_init()
 
 add_executable(zx_copro
 zx_copro.c
+rom_emulation.c
+zx_mirror.c
+z80_test_image.c
 )
 
 target_link_libraries(zx_copro
 		      pico_stdlib
 		      hardware_gpio
+			  pico_multicore
 )
 
 pico_add_extra_outputs(zx_copro)
