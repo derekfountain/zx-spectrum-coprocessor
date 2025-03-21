@@ -45,10 +45,11 @@ void initialise_zx_mirror( void )
     zx_memory_mirror[i]=0;
   }
 
-#if EMULATE_ROM  
-  /* Copy the original ROM image into the Z80 memory mirror */
-  memcpy( zx_memory_mirror, _48_original_rom, _48_original_rom_len );
-#endif
+  if( using_rom_emulation() )
+  {  
+    /* Copy the original ROM image into the Z80 memory mirror */
+    memcpy( zx_memory_mirror, _48_original_rom, _48_original_rom_len );
+  }
 
   return;
 }

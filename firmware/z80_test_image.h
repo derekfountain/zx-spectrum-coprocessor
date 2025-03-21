@@ -22,9 +22,7 @@
 
 #include <stdint.h>
 
-#define USE_Z80_TEST_IMAGE 1
-
-uint32_t using_z80_test_image( void );
+uint32_t  using_z80_test_image( void );
 
 uint8_t  *get_z80_test_image_src( void );
 uint16_t  get_z80_test_image_dest( void );

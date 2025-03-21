@@ -20,16 +20,12 @@
 #ifndef __ROM_EMULATION_H
 #define __ROM_EMULATION_H
 
-#define EMULATE_ROM 1
+#include "pico/sync.h"
 
-#if EMULATE_ROM
-
-#include "pico/multicore.h"
+uint32_t using_rom_emulation( void );
 
 void start_rom_emulation( void );
 void set_initial_jp( uint16_t dest );
 void reset_initial_jp( void );
-
-#endif
 
 #endif

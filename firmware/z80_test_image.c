@@ -19,7 +19,6 @@
 
 #include "z80_test_image.h"
 
-#if USE_Z80_TEST_IMAGE
 /*
  * A test program, z80 machine code, expected to be ORGed at 0x8000.
  * Use xxd to create the header file, for example:
@@ -43,10 +42,9 @@ uint16_t get_z80_test_image_length( void )
   return z80_image_CODE_bin_len;
 }
 
-#endif
-
 uint32_t using_z80_test_image( void )
 {
+#define USE_Z80_TEST_IMAGE 1
   return USE_Z80_TEST_IMAGE;
 }
 

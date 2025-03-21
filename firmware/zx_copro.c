@@ -59,8 +59,6 @@ static void test_blipper( void )
   gpio_put( GPIO_BLIPPER1, 0 );
 }
 
-
-
 /* DMA queue */
 typedef struct _DMA_QUEUE_ENTRY
 {
@@ -72,7 +70,7 @@ DMA_QUEUE_ENTRY;
 
 /* Not sure if this queue idea is going anywhere yet */
 static DMA_QUEUE_ENTRY dma_queue[1] = {0};
-void add_dma_to_queue( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
+static void __time_critical_func(add_dma_to_queue)( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
 {
   dma_queue[0].src             = src;
   dma_queue[0].zx_ram_location = zx_ram_location;
@@ -83,6 +81,8 @@ void add_dma_to_queue( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
 static uint32_t dma_gate = 0;
 void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length ) 
 {
+  while( (gpio_get_all64() & RD_MREQ_MASK) == 0 );
+
   /* Assert bus request */
   gpio_put( GPIO_Z80_BUSREQ, 0 );
 
@@ -274,12 +274,13 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
 }
 
 
-/* Test routine, called on alarm a few secs after the zx has booted up */
-int64_t copy_test_program( alarm_id_t id, void *user_data )
+/*
+ * Test routine, called on alarm a few secs after the zx has booted up.
+ * This isn't called if we're not using the test program
+ */
+int64_t __time_critical_func(copy_test_program)( alarm_id_t id, void *user_data )
 {
-#if USE_Z80_TEST_IMAGE
   add_dma_to_queue( get_z80_test_image_src(), get_z80_test_image_dest(), get_z80_test_image_length() );
-#endif
 
   return 0;
 }
@@ -339,19 +340,24 @@ void main( void )
   initialise_zx_mirror();
 
   /* Take over the ZX ROM */
-#if EMULATE_ROM  
-  /* We're emulating ROM, hold ROMCS permanently high */
-  gpio_init( GPIO_ROMCS ); gpio_set_dir( GPIO_ROMCS, GPIO_OUT ); gpio_put( GPIO_ROMCS, 1 );
-  start_rom_emulation();
-#else
-  /* Not emulating ROM, let the Spectrum's ROM chip do its normal thing */
-  gpio_init( GPIO_ROMCS ); gpio_set_dir( GPIO_ROMCS, GPIO_IN ); // gpio_pull_up( GPIO_ROMCS );
-#endif
-
-  if( using_z80_test_image )
+  if( using_rom_emulation() )
   {
-    dma_queue[0].src = NULL;
+    /* We're emulating ROM, hold ROMCS permanently high and start the emulation running */
+    gpio_init( GPIO_ROMCS ); gpio_set_dir( GPIO_ROMCS, GPIO_OUT ); gpio_put( GPIO_ROMCS, 1 );
+    start_rom_emulation();
 
+    /* Give the other core a moment to initialise */
+    sleep_ms( 10 );
+  }
+  else
+  {
+    /* Not emulating ROM, let the Spectrum's ROM chip do its normal thing */
+    gpio_init( GPIO_ROMCS ); gpio_set_dir( GPIO_ROMCS, GPIO_IN );
+  }
+
+  dma_queue[0].src = NULL;
+  if( using_z80_test_image() )
+  {
     /* The DMA stuff starts in a few seconds */
     add_alarm_in_ms( 3000, copy_test_program, NULL, 0 );
   }
@@ -396,22 +402,21 @@ void main( void )
       dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length );
       dma_queue[0].src = NULL;
 
-#if USE_Z80_TEST_IMAGE
-#if EMULATE_ROM
-      /*
-       * If we're using the Z80 test code and emulating the ROM, reset the Z80
-       * and set the flag which causes the JP 0x8000 at the start of the
-       * emulated ROM.
-       * This isn't really correct, the memory blocked DMAed above might not be
-       * the test code, it might be something else. This all needs working out.
-       */
-      set_initial_jp( 0x8000 );
+      if( using_z80_test_image() && using_rom_emulation() )
+      {
+        /*
+         * If we're using the Z80 test code and emulating the ROM, reset the Z80
+         * and set the flag which causes the JP 0x8000 at the start of the
+         * emulated ROM.
+         * This isn't really correct, the memory blocked DMAed above might not be
+         * the test code, it might be something else. This all needs working out.
+         */
+        set_initial_jp( 0x8000 );
       
-      gpio_put( GPIO_RESET_Z80, 1 );
-      busy_wait_us_32( 100 );
-      gpio_put( GPIO_RESET_Z80, 0 );
-#endif
-#endif
+        gpio_put( GPIO_RESET_Z80, 1 );
+        busy_wait_us_32( 100 );
+        gpio_put( GPIO_RESET_Z80, 0 );
+      }
     }
 
   }
