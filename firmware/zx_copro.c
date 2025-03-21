@@ -347,7 +347,7 @@ void main( void )
     start_rom_emulation();
 
     /* Give the other core a moment to initialise */
-    sleep_ms( 10 );
+    sleep_ms( 100 );
   }
   else
   {

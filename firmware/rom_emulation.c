@@ -40,7 +40,7 @@ void reset_initial_jp( void )
 
 uint32_t using_rom_emulation( void )
 {
-#define EMULATE_ROM 0
+#define EMULATE_ROM 1
   return EMULATE_ROM;
 }
 
