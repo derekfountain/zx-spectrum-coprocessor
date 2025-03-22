@@ -78,7 +78,7 @@
 /* A memory read is when mem-request and read are both low */
 #define RD_MREQ_MASK ((uint64_t)((0x01 << GPIO_Z80_MREQ) | (0x01 << GPIO_Z80_RD)))
 
-/* A memory read is when mem-request and read are both low */
+/* Z80 is in reset when this bit is masked and found low */
 #define Z80_IN_RESET_MASK ((uint64_t)(0x01 << GPIO_Z80_RESET))
 
 #endif
