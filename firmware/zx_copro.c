@@ -47,7 +47,7 @@
 
 
 /* Using this messes up the DMA timings */
-//#define OVERCLOCK 270000
+#define OVERCLOCK 270000
 
 static void test_blipper( void )
 {
@@ -370,7 +370,8 @@ void main( void )
    * write is finished long before the RP2350 even gets to call the handler function.
    * So, tight loop in the main core for now.
    */
-  while( 1 )
+  while( 1 );
+#if 0
   {
     register uint64_t gpios = gpio_get_all64();
 
@@ -420,6 +421,6 @@ void main( void )
     }
 
   }
-
+#endif
 }
  
