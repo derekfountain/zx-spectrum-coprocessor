@@ -27,8 +27,11 @@
 
 #include "gpios.h"
 
-//overclock appears to be needed, but why? am i really that close to the speed limit?
-//#define OVERCLOCK 270000
+/*
+ * Overclock to 190MHz appears to be needed, but why?
+ * I don't appear to be that close to the speed limit
+ */
+#define OVERCLOCK 200000
 
 static uint16_t initial_jp_destination = 0;
 
@@ -70,14 +73,14 @@ static void __time_critical_func(core1_rom_emulation)( void )
      * Ths fastest Z80 memory read is the M1 instruction fetch. It takes 1.5 
      * Z80 clock cycles from MREQ going low to the CPU reading the data byte
      * from the data bus. That's about 428ns.
+     * A refresh has MREQ low for one Z80 clock cycle, which is 285ns. I 
+     * can ignore those.
      */
 
     /* Spin, waiting for a memory request. (Approx 90ns to 100ns)  */
-//    while( (((gpios = gpio_get_all64()) & RD_MREQ_MASK)) && (gpios & WR_MREQ_MASK) );
-//    gpios = gpio_get_all64();
-  gpio_put( GPIO_BLIPPER1, 0 );
+    gpio_put( GPIO_BLIPPER1, 0 );
     while( ((gpios = gpio_get_all64()) & mreq_mask) );
-  gpio_put( GPIO_BLIPPER1, 1 );
+    gpio_put( GPIO_BLIPPER1, 1 );
 
     /* Pick up the address being accessed (approx 20ns) */
     register uint64_t address = (gpios & GPIO_ABUS_BITMASK) >> GPIO_ABUS_A0;
@@ -104,7 +107,7 @@ static void __time_critical_func(core1_rom_emulation)( void )
 #endif
 
         /* Set the data bus to outputs */
-        gpio_set_dir_out_masked( GPIO_DBUS_BITMASK );
+        gpio_set_dir_out_masked64( GPIO_DBUS_BITMASK );
 
         /* Write the value out to the Z80 */
         gpio_put_masked64( GPIO_DBUS_BITMASK, (data & 0xFF) << GPIO_DBUS_D0 );
@@ -115,14 +118,12 @@ static void __time_critical_func(core1_rom_emulation)( void )
          * after approx 300ns to 375ns. With a 270MHz overclock the data is
          * consistently ready about 200ns to 220ns after MREQ goes low.
          */
-  gpio_put( GPIO_BLIPPER2, 0 );
       
         /* Wait for the Z80's read to finish */
         while( (gpio_get_all64() & mreq_mask) == 0 );
-  gpio_put( GPIO_BLIPPER2, 1 );
 
         /* Z80 has picked up the byte, put data bus back to inputs */
-        gpio_set_dir_in_masked( GPIO_DBUS_BITMASK );
+        gpio_set_dir_in_masked64( GPIO_DBUS_BITMASK );
       }
       else
       {
@@ -134,8 +135,7 @@ static void __time_critical_func(core1_rom_emulation)( void )
         while( (gpio_get_all64() & mreq_mask) == 0 );        
       }
     }
-#if 0
-    else if( (gpios & WR_MREQ_MASK) == 0 )
+    else if( (gpios & wr_mask) == 0 )
     {
       /* Ignore writes to ROM */
       if( address >= 0x4000 )
@@ -148,7 +148,29 @@ static void __time_critical_func(core1_rom_emulation)( void )
       /* Wait for the Z80 write to finish. MREQ stays low for around 285ns */
       while( (gpio_get_all64() & mreq_mask) == 0 );
     }
+    else
+    {
+#if 0
+      /*
+       * I don't understand why this doesn't work. Leaving it in causes the
+       * Spectrum to crash. In fact, it doesn't actually start up. If I leave
+       * this out I see a series of blips from the main filter loop at the
+       * top as it repeatedly decides MREQ is active and the code comes here
+       * and drops out again. That seems harmless, but it's not really right.
+       * If I leave this code in, it waits for the MREQ to end before going
+       * back to the top. That should also work, and it looks the same on the
+       * scope, but the ZX then won't start.
+       */  
+      /*
+       * MREQ is low, but it's not a read and it's not a write. It must be
+       * a refresh. Let it finish, then go back for the next one.
+       * On a refresh MREQ stays low for one Z80 cycle, so around 285ns.
+       */
+      gpio_put( GPIO_BLIPPER2, 0 );
+      while( (gpio_get_all64() & mreq_mask) == 0 );
+      gpio_put( GPIO_BLIPPER2, 1 );
 #endif
+    }
   } /* End infinite loop */
 }
 

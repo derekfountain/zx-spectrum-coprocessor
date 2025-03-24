@@ -49,7 +49,7 @@
 #define GPIO_DBUS_D6      6
 #define GPIO_DBUS_D7      7
 
-#define GPIO_DBUS_BITMASK 0x000000FF
+#define GPIO_DBUS_BITMASK 0x00000000000000FF
 
 /* Z80 Address bus */
 #define GPIO_ABUS_A0      8
@@ -69,7 +69,7 @@
 #define GPIO_ABUS_A14     22
 #define GPIO_ABUS_A15     23
 
-#define GPIO_ABUS_BITMASK 0x00FFFF00
+#define GPIO_ABUS_BITMASK 0x0000000000FFFF00
 
 /* Mask for a memory request condition */
 #define MREQ_MASK    ((uint64_t)(0x01 << GPIO_Z80_MREQ))
