@@ -47,7 +47,7 @@
 
 
 /* Using this messes up the DMA timings */
-#define OVERCLOCK 270000
+//#define OVERCLOCK 270000
 
 static void test_blipper( void )
 {
@@ -315,8 +315,8 @@ void main( void )
   gpio_init( GPIO_RESET_Z80 ); gpio_set_dir( GPIO_RESET_Z80, GPIO_OUT ); gpio_put( GPIO_RESET_Z80, 1 );
  
   /* Blippers, for the scope */
-  gpio_init( GPIO_BLIPPER1 ); gpio_set_dir( GPIO_BLIPPER1, GPIO_OUT ); gpio_put( GPIO_BLIPPER1, 0 );
-  gpio_init( GPIO_BLIPPER2 ); gpio_set_dir( GPIO_BLIPPER2, GPIO_OUT ); gpio_put( GPIO_BLIPPER2, 0 );
+  gpio_init( GPIO_BLIPPER1 ); gpio_set_dir( GPIO_BLIPPER1, GPIO_OUT ); gpio_put( GPIO_BLIPPER1, 1 );
+  gpio_init( GPIO_BLIPPER2 ); gpio_set_dir( GPIO_BLIPPER2, GPIO_OUT ); gpio_put( GPIO_BLIPPER2, 1 );
  
   /* Set up Z80 control bus */  
   gpio_init( GPIO_Z80_CLK  );   gpio_set_dir( GPIO_Z80_CLK,  GPIO_IN );
@@ -401,6 +401,7 @@ void main( void )
     if( dma_queue[0].src != NULL )
     {
       dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length );
+
       dma_queue[0].src = NULL;
 
       if( using_z80_test_image() && using_rom_emulation() )

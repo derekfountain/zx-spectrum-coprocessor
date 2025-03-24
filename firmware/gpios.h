@@ -71,6 +71,12 @@
 
 #define GPIO_ABUS_BITMASK 0x00FFFF00
 
+/* Mask for a memory request condition */
+#define MREQ_MASK    ((uint64_t)(0x01 << GPIO_Z80_MREQ))
+
+/* Read and write masks */
+#define RD_MASK      ((uint64_t)(0x01 << GPIO_Z80_RD))
+#define WR_MASK      ((uint64_t)(0x01 << GPIO_Z80_WR))
 
 /* A memory write is when mem-request and write are both low */
 #define WR_MREQ_MASK ((uint64_t)((0x01 << GPIO_Z80_MREQ) | (0x01 << GPIO_Z80_WR)))
