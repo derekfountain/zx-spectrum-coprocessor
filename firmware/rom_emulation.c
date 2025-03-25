@@ -28,8 +28,14 @@
 #include "gpios.h"
 
 /*
- * Overclock to 190MHz appears to be needed, but why?
- * I don't appear to be that close to the speed limit
+ * Timings here are very tight. At 200MHz a single RP2350 instruction takes 5ns. 
+ * Each cycle of the 3.5MHz Z80 is about 286ns, so there's time for 57 RP2350
+ * instructions to execute in one Z80 cycle.
+ * The Z80's M1 instruction fetch has MREQ low for one-and-a-half Z80 cycles. 
+ * That's 85 RP2350 cycles to spot the MREQ, read the address bus, find the
+ * data value and get it on the data bus.
+ * I don't want to use a ridiculous overclock, 200MHz is fine, maybe a bit
+ * faster if I really have to.
  */
 #define OVERCLOCK 200000
 
@@ -78,9 +84,7 @@ static void __time_critical_func(core1_rom_emulation)( void )
      */
 
     /* Spin, waiting for a memory request. (Approx 90ns to 100ns)  */
-    gpio_put( GPIO_BLIPPER1, 0 );
     while( ((gpios = gpio_get_all64()) & mreq_mask) );
-    gpio_put( GPIO_BLIPPER1, 1 );
 
     /* Pick up the address being accessed (approx 20ns) */
     register uint64_t address = (gpios & GPIO_ABUS_BITMASK) >> GPIO_ABUS_A0;
@@ -93,17 +97,14 @@ static void __time_critical_func(core1_rom_emulation)( void )
       {
         /* Pick up ROM byte from local mirror (Approx 100ns) */
         uint8_t data = get_zx_mirror_byte( address );
-#if 0
+
+#if 1
+gpio_put( GPIO_BLIPPER1, 0 );
         if( using_z80_test_image() )
         {
-          /* Inject JP to the z80 test code into bytes 0, 1 and 2 */
-          if( initial_jp_destination != 0 )
-          {
-            if(      address == 0x0000 ) data = 0xc3;
-            else if( address == 0x0001 ) data = (uint8_t)(initial_jp_destination & 0xFF);
-            else if( address == 0x0002 ) data = (uint8_t)((initial_jp_destination >> 8) & 0xFF);
-          }
+
         }
+gpio_put( GPIO_BLIPPER1, 1 );
 #endif
 
         /* Set the data bus to outputs */
@@ -135,6 +136,7 @@ static void __time_critical_func(core1_rom_emulation)( void )
         while( (gpio_get_all64() & mreq_mask) == 0 );        
       }
     }
+  #if 0
     else if( (gpios & wr_mask) == 0 )
     {
       /* Ignore writes to ROM */
@@ -148,6 +150,7 @@ static void __time_critical_func(core1_rom_emulation)( void )
       /* Wait for the Z80 write to finish. MREQ stays low for around 285ns */
       while( (gpio_get_all64() & mreq_mask) == 0 );
     }
+#endif
     else
     {
 #if 0

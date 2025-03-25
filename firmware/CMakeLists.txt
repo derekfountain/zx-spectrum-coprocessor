@@ -23,5 +23,8 @@ target_link_libraries(zx_copro
 			    pico_multicore
 )
 
+pico_enable_stdio_usb(zx_copro 0)
+pico_enable_stdio_uart(zx_copro 0)
+
 pico_add_extra_outputs(zx_copro)
 
