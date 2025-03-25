@@ -81,13 +81,13 @@ static void __time_critical_func(core1_rom_emulation)( void )
     const uint64_t rd_mask   = RD_MASK;
     const uint64_t wr_mask   = WR_MASK;
 
-    register uint64_t gpios;
+    uint64_t gpios;
     
     /* Spin, waiting for a memory request. (Approx 90ns to 100ns)  */
     while( ((gpios = gpio_get_all64()) & mreq_mask) );
 
     /* Pick up the address being accessed (approx 20ns) */
-    register uint64_t address = (gpios & GPIO_ABUS_BITMASK) >> GPIO_ABUS_A0;
+    uint64_t address = (gpios & GPIO_ABUS_BITMASK) >> GPIO_ABUS_A0;
 
     /* Is it a read that's happening? (Approx 35ns) */
     if( (gpios & rd_mask) == 0 )
@@ -95,17 +95,19 @@ static void __time_critical_func(core1_rom_emulation)( void )
       /* Ignore reads from anywhere other than ROM, the Spectrum still reads its own RAM (Approx 15ns) */
       if( address <= 0x3FFF )
       {
-        /* Pick up ROM byte from local image (Approx ???ns) */
+        /* Pick up ROM byte from local image */
         uint8_t data = rom_image[address];
 
-#if 1
-gpio_put( GPIO_BLIPPER1, 0 );
         if( using_z80_test_image() )
         {
-
+          /* Inject JP to the z80 test code into bytes 0, 1 and 2 */
+          if( initial_jp_destination != 0 )
+          {
+            if(      address == 0x0000 ) data = 0xc3;
+            else if( address == 0x0001 ) data = (uint8_t)(initial_jp_destination & 0xFF);
+            else if( address == 0x0002 ) data = (uint8_t)((initial_jp_destination >> 8) & 0xFF);
+          }
         }
-gpio_put( GPIO_BLIPPER1, 1 );
-#endif
 
         /* Set the data bus to outputs */
         gpio_set_dir_out_masked64( GPIO_DBUS_BITMASK );

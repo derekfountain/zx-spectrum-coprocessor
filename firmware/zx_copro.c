@@ -45,10 +45,6 @@
 
 #include "gpios.h"
 
-
-/* Using this messes up the DMA timings */
-//#define OVERCLOCK 270000
-
 static void test_blipper( void )
 {
   gpio_put( GPIO_BLIPPER1, 1 );
@@ -70,7 +66,7 @@ DMA_QUEUE_ENTRY;
 
 /* Not sure if this queue idea is going anywhere yet */
 static DMA_QUEUE_ENTRY dma_queue[1] = {0};
-static void __time_critical_func(add_dma_to_queue)( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
+static void add_dma_to_queue( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
 {
   dma_queue[0].src             = src;
   dma_queue[0].zx_ram_location = zx_ram_location;
@@ -278,7 +274,7 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
  * Test routine, called on alarm a few secs after the zx has booted up.
  * This isn't called if we're not using the test program
  */
-int64_t __time_critical_func(copy_test_program)( alarm_id_t id, void *user_data )
+int64_t copy_test_program( alarm_id_t id, void *user_data )
 {
   add_dma_to_queue( get_z80_test_image_src(), get_z80_test_image_dest(), get_z80_test_image_length() );
 
@@ -289,10 +285,6 @@ int64_t __time_critical_func(copy_test_program)( alarm_id_t id, void *user_data 
 void main( void )
 {
   bi_decl(bi_program_description("ZX Spectrum Coprocessor Board Binary."));
-
-#ifdef OVERCLOCK
-  set_sys_clock_khz( OVERCLOCK, 1 );
-#endif
 
   /* All interrupts off except the timers */
 //  irq_set_mask_enabled( 0xFFFFFFFF, 0 );
@@ -370,29 +362,8 @@ void main( void )
    * write is finished long before the RP2350 even gets to call the handler function.
    * So, tight loop in the main core for now.
    */
-  while( 1 );
-#if 0
+  while( 1 )
   {
-    register uint64_t gpios = gpio_get_all64();
-
-    /* Pick up the address being accessed */
-    register uint64_t address = (gpios & GPIO_ABUS_BITMASK) >> GPIO_ABUS_A0;
-
-    /* Note this will trigger if another core is doing DMA */
-    if( (gpios & WR_MREQ_MASK) == 0 )
-    {
-      /* Ignore writes to ROM */
-      if( address >= 0x4000 )
-      {
-        /* Pick the value being written from the data bus and mirror it */
-        uint8_t data = (gpios & GPIO_DBUS_BITMASK) & 0xFF;
-        put_zx_mirror_byte( address, data );
-      }
-
-      /* Wait for the Z80 write to finish */
-      while( (gpio_get_all64() & WR_MREQ_MASK) == 0 );
-    }
-
     /*
      * If there's something in the DMA queue, activate it while we're
      * between ROM reads. I think this might need to go onto the other
@@ -420,8 +391,7 @@ void main( void )
         gpio_put( GPIO_RESET_Z80, 0 );
       }
     }
-
   }
-#endif
+
 }
  

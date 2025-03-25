@@ -42,9 +42,9 @@ uint16_t get_z80_test_image_length( void )
   return z80_image_CODE_bin_len;
 }
 
-uint32_t using_z80_test_image( void )
+inline uint32_t using_z80_test_image( void )
 {
-#define USE_Z80_TEST_IMAGE 0
+#define USE_Z80_TEST_IMAGE 1
   return USE_Z80_TEST_IMAGE;
 }
 
