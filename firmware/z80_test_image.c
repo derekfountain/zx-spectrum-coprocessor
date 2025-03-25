@@ -34,6 +34,7 @@ uint8_t *get_z80_test_image_src( void )
 
 uint16_t get_z80_test_image_dest( void )
 {
+  /* Z80 test image code is assumed to be org'ed at $8000 */
   return 0x8000;
 }
 

@@ -39,8 +39,11 @@
  * data value and get it on the data bus.
  * I don't want to use a ridiculous overclock, 200MHz is fine, maybe a bit
  * faster if I really have to.
+ * 
+ * Testing shows 180MHz is fast enough for the time being. Comments in this code
+ * are based on a 200MHz overclock.
  */
-#define OVERCLOCK 200000
+#define OVERCLOCK 180000
 
 static uint16_t initial_jp_destination = 0;
 
@@ -54,24 +57,19 @@ void reset_initial_jp( void )
   initial_jp_destination = 0;
 }
 
-uint32_t using_rom_emulation( void )
+inline uint32_t using_rom_emulation( void )
 {
 #define EMULATE_ROM 1
   return EMULATE_ROM;
 }
 
-static uint8_t rom_image[16384];
-
-static void __time_critical_func(core1_rom_emulation)( void )
+static void core1_rom_emulation( void )
 {
 #ifdef OVERCLOCK
   set_sys_clock_khz( OVERCLOCK, 1 );
 #endif
 
   irq_set_mask_enabled( 0xFFFFFFFF, 0 );
-
-  /* Copy the original ROM image into the emulation memory buffer */
-  memcpy( rom_image, _48_original_rom, _48_original_rom_len );
 
   initial_jp_destination = 0;
 
@@ -96,7 +94,7 @@ static void __time_critical_func(core1_rom_emulation)( void )
       if( address <= 0x3FFF )
       {
         /* Pick up ROM byte from local image */
-        uint8_t data = rom_image[address];
+        uint8_t data = *(_48_original_rom+address);
 
         if( using_z80_test_image() )
         {
