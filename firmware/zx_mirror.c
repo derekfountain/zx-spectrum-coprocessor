@@ -28,12 +28,12 @@
  */
 static uint8_t zx_memory_mirror[ZX_MEMORY_SIZE];
 
-uint8_t get_zx_mirror_byte( uint32_t offset )
+inline uint8_t get_zx_mirror_byte( uint32_t offset )
 {
   return zx_memory_mirror[offset];
 }
 
-void put_zx_mirror_byte( uint32_t offset, uint8_t value )
+inline void put_zx_mirror_byte( uint32_t offset, uint8_t value )
 {
   zx_memory_mirror[offset] = value;
 }

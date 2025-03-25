@@ -37,7 +37,7 @@
  * I don't want to use a ridiculous overclock, 200MHz is fine, maybe a bit
  * faster if I really have to.
  */
-#define OVERCLOCK 200000
+#define OVERCLOCK 220000
 
 static uint16_t initial_jp_destination = 0;
 
@@ -75,14 +75,6 @@ static void __time_critical_func(core1_rom_emulation)( void )
 
     register uint64_t gpios;
     
-    /*
-     * Ths fastest Z80 memory read is the M1 instruction fetch. It takes 1.5 
-     * Z80 clock cycles from MREQ going low to the CPU reading the data byte
-     * from the data bus. That's about 428ns.
-     * A refresh has MREQ low for one Z80 clock cycle, which is 285ns. I 
-     * can ignore those.
-     */
-
     /* Spin, waiting for a memory request. (Approx 90ns to 100ns)  */
     while( ((gpios = gpio_get_all64()) & mreq_mask) );
 
@@ -136,7 +128,6 @@ gpio_put( GPIO_BLIPPER1, 1 );
         while( (gpio_get_all64() & mreq_mask) == 0 );        
       }
     }
-  #if 0
     else if( (gpios & wr_mask) == 0 )
     {
       /* Ignore writes to ROM */
@@ -147,32 +138,21 @@ gpio_put( GPIO_BLIPPER1, 1 );
         put_zx_mirror_byte( address, data );
       }
 
-      /* Wait for the Z80 write to finish. MREQ stays low for around 285ns */
-      while( (gpio_get_all64() & mreq_mask) == 0 );
+      /*
+       * I don't attempt to wait for the MREQ to finish. The timing is too
+       * tight, it's quicker just to let it go back to the top of the loop
+       * and drop through here several times while the write completes.
+       */
     }
-#endif
     else
     {
-#if 0
-      /*
-       * I don't understand why this doesn't work. Leaving it in causes the
-       * Spectrum to crash. In fact, it doesn't actually start up. If I leave
-       * this out I see a series of blips from the main filter loop at the
-       * top as it repeatedly decides MREQ is active and the code comes here
-       * and drops out again. That seems harmless, but it's not really right.
-       * If I leave this code in, it waits for the MREQ to end before going
-       * back to the top. That should also work, and it looks the same on the
-       * scope, but the ZX then won't start.
-       */  
       /*
        * MREQ is low, but it's not a read and it's not a write. It must be
-       * a refresh. Let it finish, then go back for the next one.
-       * On a refresh MREQ stays low for one Z80 cycle, so around 285ns.
+       * a refresh. I don't attempt to wait for the MREQ to finish. The
+       * timing is too tight, it's quicker just to let it go back to the
+       * top of the loop and drop through here several times while the
+       * refresh completes.
        */
-      gpio_put( GPIO_BLIPPER2, 0 );
-      while( (gpio_get_all64() & mreq_mask) == 0 );
-      gpio_put( GPIO_BLIPPER2, 1 );
-#endif
     }
   } /* End infinite loop */
 }
