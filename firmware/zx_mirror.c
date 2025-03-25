@@ -20,11 +20,12 @@
 #include <string.h>
 
 #include "zx_mirror.h"
-#include "rom_emulation.h"
-#include "rom.h"
 
 /*
- * Local copy of the ZX memory, 64K including the ROM
+ * Local copy of the ZX memory, 64K including the ROM. The ROM area in this
+ * image is unused. The ROM emulation code uses its own buffer for that. 
+ * The $0000 to $3FFF area here will be updated if anything writes to ROM
+ * (which some code in the Spectrum ROM does do). But it will be ignored.
  */
 static uint8_t zx_memory_mirror[ZX_MEMORY_SIZE];
 
@@ -43,12 +44,6 @@ void initialise_zx_mirror( void )
   for( uint32_t i=0; i < ZX_MEMORY_SIZE; i++ )
   {
     zx_memory_mirror[i]=0;
-  }
-
-  if( using_rom_emulation() )
-  {  
-    /* Copy the original ROM image into the Z80 memory mirror */
-    memcpy( zx_memory_mirror, _48_original_rom, _48_original_rom_len );
   }
 
   return;

@@ -17,11 +17,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <string.h>
+
 #include "hardware/gpio.h"
 #include "pico/multicore.h"
 #include "hardware/clocks.h"
 
 #include "rom_emulation.h"
+#include "rom.h"
 #include "zx_mirror.h"
 #include "z80_test_image.h"
 
@@ -37,7 +40,7 @@
  * I don't want to use a ridiculous overclock, 200MHz is fine, maybe a bit
  * faster if I really have to.
  */
-#define OVERCLOCK 220000
+#define OVERCLOCK 200000
 
 static uint16_t initial_jp_destination = 0;
 
@@ -57,13 +60,18 @@ uint32_t using_rom_emulation( void )
   return EMULATE_ROM;
 }
 
+static uint8_t rom_image[16384];
+
 static void __time_critical_func(core1_rom_emulation)( void )
 {
-  irq_set_mask_enabled( 0xFFFFFFFF, 0 );
-
 #ifdef OVERCLOCK
   set_sys_clock_khz( OVERCLOCK, 1 );
 #endif
+
+  irq_set_mask_enabled( 0xFFFFFFFF, 0 );
+
+  /* Copy the original ROM image into the emulation memory buffer */
+  memcpy( rom_image, _48_original_rom, _48_original_rom_len );
 
   initial_jp_destination = 0;
 
@@ -87,8 +95,8 @@ static void __time_critical_func(core1_rom_emulation)( void )
       /* Ignore reads from anywhere other than ROM, the Spectrum still reads its own RAM (Approx 15ns) */
       if( address <= 0x3FFF )
       {
-        /* Pick up ROM byte from local mirror (Approx 100ns) */
-        uint8_t data = get_zx_mirror_byte( address );
+        /* Pick up ROM byte from local image (Approx ???ns) */
+        uint8_t data = rom_image[address];
 
 #if 1
 gpio_put( GPIO_BLIPPER1, 0 );
@@ -130,13 +138,15 @@ gpio_put( GPIO_BLIPPER1, 1 );
     }
     else if( (gpios & wr_mask) == 0 )
     {
-      /* Ignore writes to ROM */
-      if( address >= 0x4000 )
-      {
-        /* Pick the value being written from the data bus and mirror it */
-        uint8_t data = (gpios & GPIO_DBUS_BITMASK) & 0xFF;
-        put_zx_mirror_byte( address, data );
-      }
+      /*
+       * Pick the value being written from the data bus and mirror it.
+       * Writes to ROM will be written into the mirror, but they're not
+       * accessed from there. The code above uses its own ROM image.
+       * I did it this way for speed. There's not enough time here to
+       * check if address is < 0x4000.
+       */
+      uint8_t data = (gpios & GPIO_DBUS_BITMASK) & 0xFF;
+      put_zx_mirror_byte( address, data );
 
       /*
        * I don't attempt to wait for the MREQ to finish. The timing is too
