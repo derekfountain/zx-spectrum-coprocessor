@@ -1,0 +1,32 @@
+.program int_counter
+
+.wrap_target
+    set pins, 1 [16]
+    set pins, 0 [16]
+.wrap
+
+
+
+
+% c-sdk {
+
+/*
+ *
+ */
+void int_counter_program_init(PIO pio, uint sm, uint offset, uint int_pin )
+{
+  /* Set pin up for PIO use */
+  pio_gpio_init(pio, int_pin);
+
+  /* Set input pin to be input */
+//  pio_sm_set_consecutive_pindirs(pio, sm, int_pin,  1, false);
+  pio_sm_set_consecutive_pindirs(pio, sm, int_pin,  1, true);  // One pin is output
+
+  pio_sm_config c = int_counter_program_get_default_config(offset);
+//  sm_config_set_in_pins(&c, int_pin);
+   sm_config_set_set_pins(&c, int_pin, 1);
+
+  /* Initialise the state machine */
+  pio_sm_init(pio, sm, offset, &c);
+}
+%}

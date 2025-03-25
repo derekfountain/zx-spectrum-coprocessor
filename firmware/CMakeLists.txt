@@ -19,10 +19,13 @@ zx_mirror.c
 z80_test_image.c
 )
 
+pico_generate_pio_header(zx_copro ${CMAKE_CURRENT_LIST_DIR}/int_counter.pio)
+
 target_link_libraries(zx_copro
 		      pico_stdlib
 		      hardware_gpio
 			    pico_multicore
+          hardware_pio
 )
 
 pico_enable_stdio_usb(zx_copro 0)

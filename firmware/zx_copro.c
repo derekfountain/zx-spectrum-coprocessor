@@ -43,6 +43,8 @@
 #include "zx_mirror.h"
 #include "z80_test_image.h"
 
+#include "hardware/pio.h"
+#include "int_counter.pio.h"
 #include "gpios.h"
 
 static void test_blipper( void )
@@ -327,6 +329,14 @@ void main( void )
 
   /* Initialise Z80 address bus GPIOs as inputs */
   gpio_init_mask( GPIO_ABUS_BITMASK );  gpio_set_dir_in_masked( GPIO_ABUS_BITMASK );
+
+  /* Use PIO to time DMA missing the /INT signal */
+  PIO pio                 = pio0;
+  pio_set_gpio_base( pio, 16 );
+  uint sm_int_counter     = pio_claim_unused_sm( pio, true );
+  uint offset_int_counter = pio_add_program( pio, &int_counter_program );
+  int_counter_program_init( pio, sm_int_counter, offset_int_counter, 37 );// GPIO_Z80_INT );
+  pio_sm_set_enabled( pio, sm_int_counter, true);
 
   /* Zero mirror memory */
   initialise_zx_mirror();
