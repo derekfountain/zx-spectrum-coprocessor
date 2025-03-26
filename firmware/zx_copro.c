@@ -44,6 +44,7 @@
 #include "z80_test_image.h"
 
 #include "hardware/pio.h"
+#include "hardware/dma.h"
 #include "int_counter.pio.h"
 #include "gpios.h"
 
@@ -330,12 +331,17 @@ void main( void )
   /* Initialise Z80 address bus GPIOs as inputs */
   gpio_init_mask( GPIO_ABUS_BITMASK );  gpio_set_dir_in_masked( GPIO_ABUS_BITMASK );
 
-  /* Use PIO to time DMA missing the /INT signal */
+  /*
+   * Use PIO to time DMA missing the /INT signal. The INT signal is in the lower range
+   * of GPIOs, but a test signal will need to be in the upper range. So set the base
+   * to 16.
+   */
   PIO pio                 = pio0;
   pio_set_gpio_base( pio, 16 );
   uint sm_int_counter     = pio_claim_unused_sm( pio, true );
   uint offset_int_counter = pio_add_program( pio, &int_counter_program );
-  int_counter_program_init( pio, sm_int_counter, offset_int_counter, 37 );// GPIO_Z80_INT );
+  // 37 is output so i can see it's running, remove that in due course
+  int_counter_program_init( pio, sm_int_counter, offset_int_counter, GPIO_Z80_INT, 37 );
   pio_sm_set_enabled( pio, sm_int_counter, true);
 
   /* Zero mirror memory */
@@ -367,6 +373,27 @@ void main( void )
   /* Let the Spectrum run */
   gpio_put( GPIO_RESET_Z80, 0 );
 
+
+// Use blipper2 as signal that the PIO has sent a value
+gpio_put( GPIO_BLIPPER2, 1 );
+
+// Set up DMA to receive value from PIO
+  int dma_chan = dma_claim_unused_channel(true);
+  dma_channel_config c = dma_channel_get_default_config(dma_chan);
+  channel_config_set_transfer_data_size(&c, DMA_SIZE_32);
+  channel_config_set_read_increment(&c, false);
+  channel_config_set_dreq(&c, DREQ_PIO0_RX0);
+
+volatile uint32_t dma_receive_word;
+    dma_channel_configure(
+        dma_chan,
+        &c,
+        &dma_receive_word, // Write address (only need to set this once)
+        &pio0_hw->rxf[0],             // Don't provide a read address yet
+        0xFFFFFFFF, // Write the same value many times, then halt and interrupt
+        true             // Don't start yet
+    );
+
   /*
    * The IRQ handler stuff is nowhere near fast enough to handle this. The Z80's
    * write is finished long before the RP2350 even gets to call the handler function.
@@ -374,6 +401,12 @@ void main( void )
    */
   while( 1 )
   {
+//    if( pio0_hw->rxf[0] )//dma_receive_word )
+    if( dma_receive_word )
+      gpio_put( GPIO_BLIPPER2, 1 );
+    else
+      gpio_put( GPIO_BLIPPER2, 0 );
+
     /*
      * If there's something in the DMA queue, activate it while we're
      * between ROM reads. I think this might need to go onto the other

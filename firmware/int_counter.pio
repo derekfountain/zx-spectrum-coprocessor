@@ -1,8 +1,53 @@
+; set counter to FFFFFFFFFF
+;  assume x?
+; dec counter while pin 0 not gone 1->0
+;  don't know how to do this
+
+;maybe do it in 2 stages
+;x--
+;jmp back if int gpio is still low
+;
+;x--
+;jmp back if int gpio is still high
+;
+;at this point int has gone low again and x contains a countdown between the 2 fallings of the gpio
+;so push that value out, then go back and do the wait again
+
+
+; transfer value in counter to core 
+; push transfers data from the ISR to the core's input FIFO
+; noblock, i presume that means if the core hasn't claimed the value
+; the new one will silently replace it
+; mov isr, x
+; push x noblock
+
+
+
+
+
 .program int_counter
 
+  set x, 1
+  set y, 0
+
 .wrap_target
-    set pins, 1 [16]
-    set pins, 0 [16]
+    wait 0 pin 0
+
+    mov isr, x
+    push noblock
+
+    set pins, 1 [31]
+    set pins, 1 [31]
+    set pins, 1 [31]
+    set pins, 1 [31]
+    set pins, 1 [31]
+
+    mov isr, y
+    push noblock
+    
+    set pins, 0
+
+    wait 1 pin 0
 .wrap
 
 
@@ -13,18 +58,19 @@
 /*
  *
  */
-void int_counter_program_init(PIO pio, uint sm, uint offset, uint int_pin )
+void int_counter_program_init(PIO pio, uint sm, uint offset, uint int_pin, uint test_pin )
 {
-  /* Set pin up for PIO use */
+  /* Set pins up for PIO use */
   pio_gpio_init(pio, int_pin);
+  pio_gpio_init(pio, test_pin);
 
   /* Set input pin to be input */
-//  pio_sm_set_consecutive_pindirs(pio, sm, int_pin,  1, false);
-  pio_sm_set_consecutive_pindirs(pio, sm, int_pin,  1, true);  // One pin is output
+  pio_sm_set_consecutive_pindirs(pio, sm, int_pin,  1, false);
+  pio_sm_set_consecutive_pindirs(pio, sm, test_pin, 1, true);
 
   pio_sm_config c = int_counter_program_get_default_config(offset);
-//  sm_config_set_in_pins(&c, int_pin);
-   sm_config_set_set_pins(&c, int_pin, 1);
+  sm_config_set_in_pins(&c, int_pin);
+  sm_config_set_set_pins(&c, test_pin, 1);
 
   /* Initialise the state machine */
   pio_sm_init(pio, sm, offset, &c);

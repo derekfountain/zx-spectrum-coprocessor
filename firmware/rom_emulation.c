@@ -40,10 +40,10 @@
  * I don't want to use a ridiculous overclock, 200MHz is fine, maybe a bit
  * faster if I really have to.
  * 
- * Testing shows 180MHz is fast enough for the time being. Comments in this code
+ * Testing shows 200MHz is fast enough for the time being. Comments in this code
  * are based on a 200MHz overclock.
  */
-#define OVERCLOCK 180000
+#define OVERCLOCK 200000
 
 static uint16_t initial_jp_destination = 0;
 

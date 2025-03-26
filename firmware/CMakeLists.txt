@@ -26,6 +26,7 @@ target_link_libraries(zx_copro
 		      hardware_gpio
 			    pico_multicore
           hardware_pio
+          hardware_dma
 )
 
 pico_enable_stdio_usb(zx_copro 0)
