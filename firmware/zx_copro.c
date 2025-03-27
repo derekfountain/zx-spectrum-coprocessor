@@ -45,7 +45,7 @@
 
 #include "hardware/pio.h"
 #include "hardware/dma.h"
-#include "int_counter.pio.h"
+#include "int_unsafe.pio.h"
 #include "gpios.h"
 
 /*
@@ -387,13 +387,13 @@ void main( void )
    * of GPIOs, but a test signal will need to be in the upper range. So set the base
    * to 16.
    */
-  PIO pio                 = pio0;
+  PIO pio                = pio0;
   pio_set_gpio_base( pio, 16 );
-  uint sm_int_counter     = pio_claim_unused_sm( pio, true );
-  uint offset_int_counter = pio_add_program( pio, &int_counter_program );
+  uint sm_int_unsafe     = pio_claim_unused_sm( pio, true );
+  uint offset_int_unsafe = pio_add_program( pio, &int_unsafe_program );
   // 37 is output so i can see it's running, remove that in due course
-  int_counter_program_init( pio, sm_int_counter, offset_int_counter, GPIO_Z80_INT, 37 );
-  pio_sm_set_enabled( pio, sm_int_counter, true);
+  int_unsafe_program_init( pio, sm_int_unsafe, offset_int_unsafe, GPIO_Z80_INT, 37 );
+  pio_sm_set_enabled( pio, sm_int_unsafe, true);
 
   /* Zero mirror memory */
   initialise_zx_mirror();
@@ -422,30 +422,34 @@ void main( void )
   }
 
   /*
-   * Set up the DMA channel which transfers the data value from the PIO
-   * which counts from the /INT signal to the point where a Z80 DMA isn't
-   * safe to perform due to the risk of losing the next /INT.
-   * The value arrives in the RX FIFO, this DMA moves it into a local variable.
-   * I'm not sure this is strictly necessary, I think I could just access the
-   * FIFO entry directly with pio0_hw->rxf[0]. But this seems the right way to
-   * do it.
+   * Set up the DMA channel which transfers a flag value from the PIO which indicates
+   * it's unsafe for a Z80 DMA to proceed due to the risk of the Z80 missing the next
+   * interrupt. The value is a 0 if there's no risk, and 1 if there is risk. It arrives
+   * in the RX FIFO, this DMA moves it into a local variable.
+   * I'm not sure this is strictly necessary, I think I could just access the flag as the
+   * FIFO entry directly with pio0_hw->rxf[0]. But this seems the right way to do it.
    * The DREQ (data request) is set to make the DMA respond when the PIO
    * makes a value available on the RX FIFO.
    */
-  int int_counter_dma_channel               = dma_claim_unused_channel( true );
-  dma_channel_config int_counter_dma_config = dma_channel_get_default_config( int_counter_dma_channel );
-  channel_config_set_transfer_data_size( &int_counter_dma_config, DMA_SIZE_32 );
-  channel_config_set_read_increment( &int_counter_dma_config, false );
-  channel_config_set_dreq( &int_counter_dma_config, DREQ_PIO0_RX0 );
+  int int_unsafe_dma_channel               = dma_claim_unused_channel( true );
+  dma_channel_config int_unsafe_dma_config = dma_channel_get_default_config( int_unsafe_dma_channel );
+  channel_config_set_transfer_data_size( &int_unsafe_dma_config, DMA_SIZE_32 );
+  channel_config_set_read_increment( &int_unsafe_dma_config, false );
+  channel_config_set_dreq( &int_unsafe_dma_config, DREQ_PIO0_RX0 );
 
-  dma_channel_configure( int_counter_dma_channel,
-                         &int_counter_dma_config,
+  dma_channel_configure( int_unsafe_dma_channel,
+                         &int_unsafe_dma_config,
                          &interrupt_unsafe,            // Write address, the local variable
                          &pio0_hw->rxf[0],             // Read address, the FIFO register
                          0xFFFFFFFF,                   // 0x0FFFFFFF plus 0xF0000000, ENDLESS, Spec 12.6.2.2.1
                          true                          // Start immediately
                        );
 
+  /*
+   * Set up the DMA channel which provides the countdown value for the PIO which handles
+   * the "interrupt unsafe" timer. This DMA just sends the same 32 bit value to the PIO
+   * each time the PIO asks for it.
+   */
   int int_interval_dma_channel               = dma_claim_unused_channel( true );
   dma_channel_config int_interval_dma_config = dma_channel_get_default_config( int_interval_dma_channel );
   channel_config_set_transfer_data_size( &int_interval_dma_config, DMA_SIZE_32 );
@@ -453,7 +457,15 @@ void main( void )
   channel_config_set_read_increment( &int_interval_dma_config, false );
   channel_config_set_dreq( &int_interval_dma_config, DREQ_PIO0_TX0 );
 
-  //const uint32_t interval_countdown = 4000000-20000;   // 79ms
+  /*
+   * Interval countdown. 20ms is 20,000,000ns, at 5ns per cycle that's 4,000,000 cycles
+   * from /INT to /INT. I want a 30us pause to come in just before the /INT. That's
+   * 30,000ns, or 6,000 cycles. So I expected the countdown run from /INT to 6,000
+   * cycles before the next /INT, which is 4,000,000-6,000=3,994,000. But that gives
+   * a pre-INT pause of about 8.5us. I don't know why.
+   * I discovered empirically that a countdown of 3,990,000 gives a pre-INT pause
+   * of about 28.7us, which will do the job. I'm just not sure why.
+   */
   const uint32_t interval_countdown = 4000000-10000;
   dma_channel_configure( int_interval_dma_channel,
                          &int_interval_dma_config,

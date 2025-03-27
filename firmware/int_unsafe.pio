@@ -1,0 +1,91 @@
+; int_unsafe PIO program
+;
+; The issue this solves is the one of the Z80 starting a DMA just as
+; the ULA issues the 50Hz interrupt. That interrupt is the heartbeat
+; of most Spectrum programs, and if one is missed displays glitch and
+; sound skips and other unwelcome stuff.
+;
+; The solution is to set a flag a few microseconds before the /INT is
+; due. If the DMA is about to run, but it sees that flag set, then it
+; knows it'll cause the Spectrum to miss the inbound /INT signal. The
+; DMA can then be suspended, most likely by treating the flag as a
+; spinlock.
+;
+; This PIO program is responsible for timing the flag. It watches for
+; /INT signal from the ULA, waits almost-but-not-quite the full 20ms
+; until the next one, and then asserts a flag for the core indicating
+; the next /INT is due. When the /INT has passed, the flag is deasserted
+; the the Spectrum can carry on as it was.
+
+; How long before the incoming /INT should the flag be raised, though?
+; There's no easy solution, so I arrived at the following compromise:
+;  a 64 byte DMA from RP2350 to the Spectrum takes 25us which is 25,000ns
+;  assume a margin of error of 5us, so the flag needs to be asserted
+;   30us before the incoming /INT fires
+;  20ms between /INTs is 20,000us which is 20,000,000ns
+;  so the flag needs to be asserted 19,970us after each /INT
+;  the flag can then remain asserted until the /INT fires.
+;
+; 30us seems a long time in RP2350-land. It's 116 T-states on the 3.5MHz
+; Z80, which at a minimum of 4 T-states for the fastest Z80 instructions
+; represents about 30 Z80 instructions. It's extremely unlikely this will
+; ever be hit, but if it is that's a price that's OK to pay, I think.
+
+.program int_unsafe
+
+.wrap_target
+
+  wait 0 pin 0              ; wait for the /INT to go low
+
+  pull block                ; fetch the countdown loop value from core DMA
+  mov x, osr                ; x is the loop counter
+
+  set y, 0                  ; send a 0 to the core C variable, Z80DMA is OK to use at this point
+  mov isr, y              
+  push noblock
+
+  set pins, 0               ; test signal low on scope indicates Z80DMA is OK to use
+
+timer_loop:                 ; count down the timer
+  jmp x--, timer_loop       ; when this expires the Z80DMA needs to be held off
+
+  set y, 1                  ; send a 1 to the core variable, suppression active
+  mov isr, y              
+  push noblock
+
+  set pins, 1               ; test signal high indicates Z80DMA is now suppressed.
+                            ; loop back to the top. the Z80DMA is held off until 
+                            ; the next /INT has appeared
+
+.wrap
+
+
+% c-sdk {
+
+/*
+ * Set up the PIO program which indicates it's unsafe to DMA because
+ * if we do the Z80 might miss the next interrupt from the ULA.
+ *
+ * int_pin is the Z80 /INT signal from the Spectrum's edge connector.
+ * test_pin is an output GPIO which can be used to monitor the status
+ * the PIO program is delivering. This can be dispensed with if GPIOs
+ * become scarce.
+ */
+void int_unsafe_program_init(PIO pio, uint sm, uint offset, uint int_pin, uint test_pin )
+{
+  /* Set pins up for PIO use */
+  pio_gpio_init(pio, int_pin);
+  pio_gpio_init(pio, test_pin);
+
+  /* Set input pin to be input */
+  pio_sm_set_consecutive_pindirs(pio, sm, int_pin,  1, false);
+  pio_sm_set_consecutive_pindirs(pio, sm, test_pin, 1, true);
+
+  pio_sm_config c = int_unsafe_program_get_default_config(offset);
+  sm_config_set_in_pins(&c, int_pin);
+  sm_config_set_set_pins(&c, test_pin, 1);
+
+  /* Initialise the state machine */
+  pio_sm_init(pio, sm, offset, &c);
+}
+%}

@@ -19,7 +19,7 @@ zx_mirror.c
 z80_test_image.c
 )
 
-pico_generate_pio_header(zx_copro ${CMAKE_CURRENT_LIST_DIR}/int_counter.pio)
+pico_generate_pio_header(zx_copro ${CMAKE_CURRENT_LIST_DIR}/int_unsafe.pio)
 
 target_link_libraries(zx_copro
 		      pico_stdlib
