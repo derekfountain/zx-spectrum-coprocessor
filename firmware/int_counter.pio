@@ -1,58 +1,49 @@
-; set counter to FFFFFFFFFF
-;  assume x?
-; dec counter while pin 0 not gone 1->0
-;  don't know how to do this
 
-;maybe do it in 2 stages
-;x--
-;jmp back if int gpio is still low
+
+
+; 20ms is 20,000us is 20,000,000ns
+; a 64 byte DMA to the zx takes 25us which is 25,000ns
+; margin of error will be 5us before INT, which is 5,000ns 
+; so pause needs to start 30us, or 30,000ns, before int
+; which is 19,970,000ns after the previous one
 ;
-;x--
-;jmp back if int gpio is still high
-;
-;at this point int has gone low again and x contains a countdown between the 2 fallings of the gpio
-;so push that value out, then go back and do the wait again
-
-
-; transfer value in counter to core 
-; push transfers data from the ISR to the core's input FIFO
-; noblock, i presume that means if the core hasn't claimed the value
-; the new one will silently replace it
-; mov isr, x
-; push x noblock
-
-
+;   at 150MHz, it's 6.66ns per cycle, so 3,994,000 cycles
+;   at 200MHz, it's 5ns per cycle, so 3,994,000 cycles
+; set flag to core high at that point to suspend DMA
+; wait for /INT
+; once it's passed it's safe to turn off the flag
 
 
 
 .program int_counter
 
-  set x, 1
+
 
 .wrap_target
-    wait 0 pin 0
 
-    set y, 1                ; send a 1 to the core
-    mov isr, x              
-    push noblock
+  wait 0 pin 0              ; wait for the /INT to go low
+
+  pull block                ; fetch the countdown loop value from core (DMA)
+  mov x, osr
+
+  set y, 0                  ; send a 0 to the core C variable, Z80DMA is OK to use at this point
+  mov isr, y              
+  push noblock
 
 ; Test signal, can be seen on 'scope
-;   set pins, 1 [31]        ; test signal
+  set pins, 0               ; test signal low indicates Z80DMA is OK to use
 
-    ; um, need a way to set the width of the suppression signal
-    nop [31]
-    nop [31]
-    nop [31]
-    nop [31]
-    nop [31]
+timer_loop:                 ; countdown the timer to close to, but not up to, the next /INT
+  jmp x--, timer_loop       ; when this expires the Z80DMA needs to be held off
 
-    set y, 0                ; send a 0 to the core
-    mov isr, y              
-    push noblock
+  set y, 1                  ; send a 1 to the core, suppression active
+  mov isr, y              
+  push noblock
 
-;   set pins, 0             ; test signal
+  set pins, 1               ; test signal high indicates Z80DMA is now suppressed
+                            ; loop back to the top. the Z80DMA is held off until 
+                            ; the next /INT has appeared
 
-    wait 1 pin 0            ; wait for /INT to go high again
 .wrap
 
 

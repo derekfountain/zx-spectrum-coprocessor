@@ -102,11 +102,6 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
   if( int_protection )
   {
     // Not sure about this bit
-    if( interrupt_unsafe )
-     gpio_put( GPIO_BLIPPER2, 1 );
-    else
-      gpio_put( GPIO_BLIPPER2, 0 );
-
   }
 
   /*
@@ -426,9 +421,6 @@ void main( void )
     add_alarm_in_ms( 3000, copy_test_program, NULL, 0 );
   }
 
-  /* Let the Spectrum run */
-  gpio_put( GPIO_RESET_Z80, 0 );
-
   /*
    * Set up the DMA channel which transfers the data value from the PIO
    * which counts from the /INT signal to the point where a Z80 DMA isn't
@@ -454,6 +446,26 @@ void main( void )
                          true                          // Start immediately
                        );
 
+  int int_interval_dma_channel               = dma_claim_unused_channel( true );
+  dma_channel_config int_interval_dma_config = dma_channel_get_default_config( int_interval_dma_channel );
+  channel_config_set_transfer_data_size( &int_interval_dma_config, DMA_SIZE_32 );
+  channel_config_set_write_increment( &int_interval_dma_config, false );
+  channel_config_set_read_increment( &int_interval_dma_config, false );
+  channel_config_set_dreq( &int_interval_dma_config, DREQ_PIO0_TX0 );
+
+  //const uint32_t interval_countdown = 4000000-20000;   // 79ms
+  const uint32_t interval_countdown = 4000000-10000;
+  dma_channel_configure( int_interval_dma_channel,
+                         &int_interval_dma_config,
+                         &pio0_hw->txf[0],             // Write address, PIO's FIFO
+                         &interval_countdown,          // Read address, value to send
+                         0xF0000001,                   // 1 transfer, plus 0xF0000000, ENDLESS, Spec 12.6.2.2.1
+                         true                          // Start immediately
+                        );
+
+  /* Let the Spectrum run */
+  gpio_put( GPIO_RESET_Z80, 0 );
+
   /*
    * The IRQ handler stuff is nowhere near fast enough to handle this. The Z80's
    * write is finished long before the RP2350 even gets to call the handler function.
@@ -462,6 +474,12 @@ void main( void )
 gpio_put( GPIO_BLIPPER2, 1 );
   while( 1 )
   {
+    if( interrupt_unsafe )
+     gpio_put( GPIO_BLIPPER2, 1 );
+    else
+      gpio_put( GPIO_BLIPPER2, 0 );
+
+
     /*
      * If there's something in the DMA queue, activate it while we're
      * between ROM reads. I think this might need to go onto the other
@@ -469,7 +487,7 @@ gpio_put( GPIO_BLIPPER2, 1 );
      */
     if( dma_queue[0].src != NULL )
     {
-      dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length, true );
+      dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length, false );
 
       dma_queue[0].src = NULL;
 
