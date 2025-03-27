@@ -48,6 +48,13 @@
 #include "int_counter.pio.h"
 #include "gpios.h"
 
+/*
+ * Flag set by a PIO routine which monitors the Spectrum's /INT line.
+ * This is set true when it's unsafe to do a DMA into the Spectrum 
+ * due to the risk of the Spectrum missing the next /INT
+ */
+volatile uint32_t interrupt_unsafe = 0;
+
 static void test_blipper( void )
 {
   gpio_put( GPIO_BLIPPER1, 1 );
@@ -76,11 +83,36 @@ static void add_dma_to_queue( uint8_t *src, uint32_t zx_ram_location, uint32_t l
   dma_queue[0].length          = length;
 }
 
-/* Need to gate this so DMA doesn't happen if we're supplying/mirroring RAM? */
-static uint32_t dma_gate = 0;
-void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length ) 
+void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
+                       const uint32_t length, const uint32_t int_protection ) 
 {
-  while( (gpio_get_all64() & RD_MREQ_MASK) == 0 );
+  /*
+   * If the Z80 is doing a read, potentially from ROM, wait for it to end.
+   * The ROM emulation code wouldn't like to be interrupted.
+   */
+  if( using_rom_emulation() )
+  {
+    while( (gpio_get_all64() & RD_MREQ_MASK) == 0 );
+  }
+
+  /*
+   * The Spectrum can't afford to miss an interrupt, so if one is approaching spin
+   * while it passes
+   */
+  if( int_protection )
+  {
+    // Not sure about this bit
+    if( interrupt_unsafe )
+     gpio_put( GPIO_BLIPPER2, 1 );
+    else
+      gpio_put( GPIO_BLIPPER2, 0 );
+
+  }
+
+  /*
+   * Empirical testing shows the DMA initialisaiton setup takes at most 8.5us.
+   * That's with a 200MHz overclock, but I'm not sure that makes much difference
+   */
 
   /* Assert bus request */
   gpio_put( GPIO_Z80_BUSREQ, 0 );
@@ -105,16 +137,30 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
   gpio_set_dir( GPIO_Z80_MREQ, GPIO_OUT ); gpio_put( GPIO_Z80_MREQ, 1 );
   gpio_set_dir( GPIO_Z80_WR,   GPIO_OUT ); gpio_put( GPIO_Z80_WR,   1 );
 
-  /* Blipper goes high while DMA process is active */
-  gpio_put( GPIO_BLIPPER1, 1 );
+  /* Blipper goes low while DMA process is active */
+  gpio_put( GPIO_BLIPPER1, 0 );
 
-  const uint32_t write_address = zx_ram_location;
+  /*
+   * At 200MHz this loop takes:
+   *  16 bytes takes 10.5us
+   *  32 bytes takes 15.5us
+   *  64 bytes takes 25us
+   * Crudely speaking, the 10us difference between the time it takes to DMA 32 bytes
+   * and the time it takes to DMA 63 bytes is about 35 Z80 T-states, or about 9
+   * of the Z80's fastest instructions. So for now I'm going to limit the on-the-fly
+   * DMA transfer to 64 bytes and hard code the INT approaching signal. That seems a
+   * fair tradeoff between functionality and not losing too much time waiting for an
+   * approaching /INT.
+   */
 
-  uint32_t byte_counter;
-  for( byte_counter=0; byte_counter < length; byte_counter++ )
+  for( uint32_t byte_counter=0; byte_counter < length; byte_counter++ )
   {
+    /* Contents of this loop takes 435ns */
+    
+    /* Set up of buses takes ~150ns */
+
     /* Set address of ZX byte to write to */
-    gpio_put_masked( GPIO_ABUS_BITMASK, (write_address+byte_counter)<<GPIO_ABUS_A0 );
+    gpio_put_masked( GPIO_ABUS_BITMASK, (zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
 
     /* Assert memory request */
     gpio_put( GPIO_Z80_MREQ, 0 );
@@ -129,27 +175,29 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
     gpio_put( GPIO_Z80_WR, 0 );
 
     /*
+     * The timing theory:
      * Spectrum RAM is rated 150ns which is 1.5e-07. RP2350 clock speed is
-     * 150,000,000Hz, so one clock cycle is 6.66666666667e-09. So that's 22.5
+     * 200,000,000Hz (overclocked), so one clock cycle is 5ns. So that's 30
      * RP2350 clock cycles in one DRAM transaction time. NOP is T1, so it
-     * takes one clock cycle, so 23 NOPs should guarantee a pause long
+     * takes one clock cycle, so 30 NOPs should guarantee a pause long
      * enough for the 4116s to respond.
+     * 
+     * I need to support both the original 4116s and the modern static RAM
+     * memory module boards. Whichever is slower is the minimum speed I
+     * run at.
      */
 #define USING_STATIC_RAM_MODULE 0
 #if USING_STATIC_RAM_MODULE
   /*
    * This was developed on a Spectrum containing a static RAM-based lower memory
    * module. I thought it would be faster than the 4116s, so should work with
-   * fewer than 23 NOPs. Turns out it doesn't. Empirical testing shows it needs 29,
-   * which is 1.93e-07 seconds, or about 19 microseconds. It don't know why.
+   * fewer than 23 NOPs. Turns out it doesn't. Empirical testing shows at 150MHz
+   * shows it needs 29, which is 1.93e-07 seconds, or about 190 nanooseconds.
    * 
    * Update: it turns out that sometimes 29 is too few and the DMA doesn't work.
    * This appears to be related to the Spectrum's temperature. The cooler the
    * machine is the longer this delay needs to be - but again, this is with a
    * static RAM module.
-   * 
-   * I've currently got this at 35/150,000,000ths of a second. This seems
-   * reliable. A transfer of 6,912 bytes at this speed takes 2.37ms.
    */
     __asm volatile ("nop");
     __asm volatile ("nop");
@@ -197,8 +245,10 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
    * This was developed on a Spectrum containing the original 4116 RAM.
    * It turns out these need more time than the static memory module. As of
    * this writing I've given up trying to predict or interpret what's going
-   * on with the timings. Empirical testing shows it needs 37 RP2350 cycles,
-   * which is 24.6 microseconds at 150MHz.
+   * on with the timings. Empirical testing shows it needs 37 RP2350 cycles
+   * at 150MHz. But I'm not sure that's right because when I overclocked to
+   * 200MHz to get the ROM emulation working this continued to work.
+   * At 200MHz each NOP takes 5ns; 37 of them take 185ns.
    */
     __asm volatile ("nop");
     __asm volatile ("nop");
@@ -246,13 +296,19 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
     __asm volatile ("nop");
 #endif
 
+    /* Mirror and buses reset takes ~100ns */
+
     /* Update local mirror to match the ZX RAM */
-    put_zx_mirror_byte( write_address+byte_counter, *(src+byte_counter) );
+    put_zx_mirror_byte( zx_ram_location+byte_counter, *(src+byte_counter) );
 
     /* Remove write and memory request */
     gpio_put( GPIO_Z80_WR,   1 );
     gpio_put( GPIO_Z80_MREQ, 1 ); 
   }
+
+  /*
+   * Empirical testing shows this DMA teardown takes at most 1.6us.
+   */
 
   /* DMA complete - put the address, data and control buses back to hi-Z */
   gpio_set_dir_in_masked( GPIO_ABUS_BITMASK );
@@ -266,8 +322,8 @@ void dma_memory_block( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
   /* Release bus request */
   gpio_put( GPIO_Z80_BUSREQ, 1 );
 
-  /* Indicate DMA process complete */
-  gpio_put( GPIO_BLIPPER1, 0 );
+  /* Indicate DMA process complete, inactive */
+  gpio_put( GPIO_BLIPPER1, 1 );
 
   return;
 }
@@ -373,40 +429,39 @@ void main( void )
   /* Let the Spectrum run */
   gpio_put( GPIO_RESET_Z80, 0 );
 
+  /*
+   * Set up the DMA channel which transfers the data value from the PIO
+   * which counts from the /INT signal to the point where a Z80 DMA isn't
+   * safe to perform due to the risk of losing the next /INT.
+   * The value arrives in the RX FIFO, this DMA moves it into a local variable.
+   * I'm not sure this is strictly necessary, I think I could just access the
+   * FIFO entry directly with pio0_hw->rxf[0]. But this seems the right way to
+   * do it.
+   * The DREQ (data request) is set to make the DMA respond when the PIO
+   * makes a value available on the RX FIFO.
+   */
+  int int_counter_dma_channel               = dma_claim_unused_channel( true );
+  dma_channel_config int_counter_dma_config = dma_channel_get_default_config( int_counter_dma_channel );
+  channel_config_set_transfer_data_size( &int_counter_dma_config, DMA_SIZE_32 );
+  channel_config_set_read_increment( &int_counter_dma_config, false );
+  channel_config_set_dreq( &int_counter_dma_config, DREQ_PIO0_RX0 );
 
-// Use blipper2 as signal that the PIO has sent a value
-gpio_put( GPIO_BLIPPER2, 1 );
-
-// Set up DMA to receive value from PIO
-  int dma_chan = dma_claim_unused_channel(true);
-  dma_channel_config c = dma_channel_get_default_config(dma_chan);
-  channel_config_set_transfer_data_size(&c, DMA_SIZE_32);
-  channel_config_set_read_increment(&c, false);
-  channel_config_set_dreq(&c, DREQ_PIO0_RX0);
-
-volatile uint32_t dma_receive_word;
-    dma_channel_configure(
-        dma_chan,
-        &c,
-        &dma_receive_word, // Write address (only need to set this once)
-        &pio0_hw->rxf[0],             // Don't provide a read address yet
-        0xFFFFFFFF, // Write the same value many times, then halt and interrupt
-        true             // Don't start yet
-    );
+  dma_channel_configure( int_counter_dma_channel,
+                         &int_counter_dma_config,
+                         &interrupt_unsafe,            // Write address, the local variable
+                         &pio0_hw->rxf[0],             // Read address, the FIFO register
+                         0xFFFFFFFF,                   // 0x0FFFFFFF plus 0xF0000000, ENDLESS, Spec 12.6.2.2.1
+                         true                          // Start immediately
+                       );
 
   /*
    * The IRQ handler stuff is nowhere near fast enough to handle this. The Z80's
    * write is finished long before the RP2350 even gets to call the handler function.
    * So, tight loop in the main core for now.
    */
+gpio_put( GPIO_BLIPPER2, 1 );
   while( 1 )
   {
-//    if( pio0_hw->rxf[0] )//dma_receive_word )
-    if( dma_receive_word )
-      gpio_put( GPIO_BLIPPER2, 1 );
-    else
-      gpio_put( GPIO_BLIPPER2, 0 );
-
     /*
      * If there's something in the DMA queue, activate it while we're
      * between ROM reads. I think this might need to go onto the other
@@ -414,7 +469,7 @@ volatile uint32_t dma_receive_word;
      */
     if( dma_queue[0].src != NULL )
     {
-      dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length );
+      dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length, true );
 
       dma_queue[0].src = NULL;
 

@@ -28,26 +28,31 @@
 .program int_counter
 
   set x, 1
-  set y, 0
 
 .wrap_target
     wait 0 pin 0
 
-    mov isr, x
+    set y, 1                ; send a 1 to the core
+    mov isr, x              
     push noblock
 
-    set pins, 1 [31]
-    set pins, 1 [31]
-    set pins, 1 [31]
-    set pins, 1 [31]
-    set pins, 1 [31]
+; Test signal, can be seen on 'scope
+;   set pins, 1 [31]        ; test signal
 
-    mov isr, y
+    ; um, need a way to set the width of the suppression signal
+    nop [31]
+    nop [31]
+    nop [31]
+    nop [31]
+    nop [31]
+
+    set y, 0                ; send a 0 to the core
+    mov isr, y              
     push noblock
-    
-    set pins, 0
 
-    wait 1 pin 0
+;   set pins, 0             ; test signal
+
+    wait 1 pin 0            ; wait for /INT to go high again
 .wrap
 
 
