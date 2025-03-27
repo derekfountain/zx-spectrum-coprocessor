@@ -11,6 +11,9 @@
 #define GPIO_BLIPPER1     46
 #define GPIO_BLIPPER2     47
 
+/* Blipper pinged from PIO which it's not safe to DMA to the Z80 */
+#define GPIO_INT_UNSAFE   37
+
 /* Take over the Spectrum's ROM */
 #define GPIO_ROMCS        28
 

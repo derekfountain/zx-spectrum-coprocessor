@@ -391,8 +391,7 @@ void main( void )
   pio_set_gpio_base( pio, 16 );
   uint sm_int_unsafe     = pio_claim_unused_sm( pio, true );
   uint offset_int_unsafe = pio_add_program( pio, &int_unsafe_program );
-  // 37 is output so i can see it's running, remove that in due course
-  int_unsafe_program_init( pio, sm_int_unsafe, offset_int_unsafe, GPIO_Z80_INT, 37 );
+  int_unsafe_program_init( pio, sm_int_unsafe, offset_int_unsafe, GPIO_Z80_INT, GPIO_INT_UNSAFE );
   pio_sm_set_enabled( pio, sm_int_unsafe, true);
 
   /* Zero mirror memory */
