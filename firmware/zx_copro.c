@@ -96,12 +96,16 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
   }
 
   /*
-   * The Spectrum can't afford to miss an interrupt, so if one is approaching spin
+   * The Spectrum can't afford to miss an interrupt, so if one is approaching, spin
    * while it passes
    */
   if( int_protection )
   {
-    // Not sure about this bit
+    /*
+     * A combination of the int_unsafe PIO program and
+     * RP2350 DMA keep this global variable updated
+     */
+    while( interrupt_unsafe );
   }
 
   /*
@@ -457,15 +461,20 @@ void main( void )
   channel_config_set_dreq( &int_interval_dma_config, DREQ_PIO0_TX0 );
 
   /*
-   * Interval countdown. 20ms is 20,000,000ns, at 5ns per cycle that's 4,000,000 cycles
-   * from /INT to /INT. I want a 30us pause to come in just before the /INT. That's
-   * 30,000ns, or 6,000 cycles. So I expected the countdown run from /INT to 6,000
-   * cycles before the next /INT, which is 4,000,000-6,000=3,994,000. But that gives
-   * a pre-INT pause of about 8.5us. I don't know why.
-   * I discovered empirically that a countdown of 3,990,000 gives a pre-INT pause
-   * of about 28.7us, which will do the job. I'm just not sure why.
+   * Interval countdown. The ULA generates /INTs at 19.97ms intervals (close to 20ms
+   * but not quite). That's 19,970,000ns, at 5ns per cycle (200MHz) that's 3,994,000
+   * cycles from /INT to /INT. I want a 30us pause to come in just before the /INT.
+   * That's 30,000ns, or 6,000 cycles. So I want the countdown to run from /INT to 6,000
+   * cycles before the next /INT, which is 3,994,000-6,000. But that gives a pre-INT
+   * pause of about 38us, not 30us. I don't know why.
+   * I discovered empirically that a countdown of 3,994,000-4,000 gives a pre-INT pause
+   * of about 29us, which will do the job. My best guess is that the 19.97ms time between
+   * INTs, which came from Smith's ULA book is not quite as precise as I'm assuming it
+   * is. Or maybe the crystal in the 40 year old Spectrum I'm testing with has wandered
+   * a bit. I could reimplement with some sort of dynamic measuring, but I think this
+   * is good enough.
    */
-  const uint32_t interval_countdown = 4000000-10000;
+  const uint32_t interval_countdown = 3994000-4000;
   dma_channel_configure( int_interval_dma_channel,
                          &int_interval_dma_config,
                          &pio0_hw->txf[0],             // Write address, PIO's FIFO
@@ -482,14 +491,30 @@ void main( void )
    * write is finished long before the RP2350 even gets to call the handler function.
    * So, tight loop in the main core for now.
    */
-gpio_put( GPIO_BLIPPER2, 1 );
   while( 1 )
   {
-    if( interrupt_unsafe )
-     gpio_put( GPIO_BLIPPER2, 1 );
-    else
-      gpio_put( GPIO_BLIPPER2, 0 );
+    if( is_immediate_cmd_pending() )
+    {
+      service_immediate_cmd();
+    }
 
+    /* Tight loop here, looking for:
+       Write to 5b00, which is first byte after screen, first byte of printer buffer
+         let's use that for now.
+         z80 user guide says ld (nnn),hl loads nnn first, then nnn+1
+          fuse code agrees
+        pick up address being written when 5b01 changes
+          this will probably work for now
+          so spin looking for mreq, write and 5b01 on the bus? PIO would be more efficient
+        if a value is written into that location
+          assume it's a immediate result command
+            but i can't assume the zx will pause and wait for the result
+              the z80 might run another couple of instructions while the copro does the task
+            but i can say that only one command is in flight at a time, so spining on that address can stop
+          carry out the operation, DMA the result back
+          DMA 0 back to 5b00 to clear it, that's what the z80 can spin on
+            i'll need to DMA scatter-gather return thing implemented
+            */
 
     /*
      * If there's something in the DMA queue, activate it while we're
@@ -498,7 +523,7 @@ gpio_put( GPIO_BLIPPER2, 1 );
      */
     if( dma_queue[0].src != NULL )
     {
-      dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length, false );
+      dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length, true );
 
       dma_queue[0].src = NULL;
 
