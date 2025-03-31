@@ -16,6 +16,7 @@ add_executable(zx_copro
 zx_copro.c
 rom_emulation.c
 zx_mirror.c
+dma_engine.c
 cmd_immediate.c
 z80_test_image.c
 )

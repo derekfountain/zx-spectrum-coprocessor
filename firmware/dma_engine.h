@@ -17,20 +17,19 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef __Z80_TEST_IMAGE_H
-#define __Z80_TEST_IMAGE_H
+#ifndef __DMA_ENGINE_H
+#define __DMA_ENGINE_H
 
 #include <stdint.h>
 
-uint32_t  using_z80_test_image( void );
+void init_dma_engine( void );
+void init_interrupt_protection( void );
 
-/* This sets up the pointers and size, etc */
-void     init_z80_test_image( void );
+void add_dma_to_queue( uint8_t *src, uint32_t zx_ram_location, uint32_t length );
+uint32_t is_dma_queue_full( void );
+void activate_dma_queue_entry( void );
 
-/* This marks the test image ready to load into the ZX at the next opportunity */
-void z80_test_image_set_pending( void );
-
-uint32_t is_z80_test_ready( void );
-
+void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
+                       const uint32_t length, const uint32_t int_protection );
 
 #endif

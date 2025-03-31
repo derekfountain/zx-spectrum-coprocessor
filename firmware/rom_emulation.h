@@ -20,6 +20,8 @@
 #ifndef __ROM_EMULATION_H
 #define __ROM_EMULATION_H
 
+#include <stdint.h>
+
 #include "pico/sync.h"
 
 uint32_t using_rom_emulation( void );

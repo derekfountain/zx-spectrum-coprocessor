@@ -1,10 +1,12 @@
 {
     "files.associations": {
-        "compare": "c",
-        "cstdint": "c",
-        "format": "c",
-        "string.h": "c",
-        "z80_test_image.h": "c",
-        "stdint.h": "c"
+      "compare": "c",
+      "cstdint": "c",
+      "format": "c",
+      "string.h": "c",
+      "z80_test_image.h": "c",
+      "stdint.h": "c",
+      "rom_emulation.h": "c",
+      "gpios.h": "c"
     }
 }
