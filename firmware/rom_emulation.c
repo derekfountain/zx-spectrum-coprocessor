@@ -95,7 +95,7 @@ static void core1_rom_emulation( void )
       {
         /* Pick up ROM byte from local image */
         uint8_t data = *(_48_original_rom+address);
-
+#if 0
         if( using_z80_test_image() )
         {
           /* Inject JP to the z80 test code into bytes 0, 1 and 2 */
@@ -106,7 +106,7 @@ static void core1_rom_emulation( void )
             else if( address == 0x0002 ) data = (uint8_t)((initial_jp_destination >> 8) & 0xFF);
           }
         }
-
+#endif
         /* Set the data bus to outputs */
         gpio_set_dir_out_masked64( GPIO_DBUS_BITMASK );
 

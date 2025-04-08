@@ -10,7 +10,7 @@ pico_sdk_init()
 
 # This doesn't appear to be of any use at the moment.
 # Turn it back on if it might be useful.
-# set(PICO_COPY_TO_RAM 1)
+set(PICO_COPY_TO_RAM 1)
 
 add_executable(zx_copro
 zx_copro.c
