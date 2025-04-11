@@ -104,11 +104,6 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
     while( interrupt_unsafe );
   }
 
-  // I don't know if this is required. The MREQ check is probably needed when my
-  // ROM emulation is running. The IORQ probably isn't needed, but there seems to
-  // be an issue with the ULA timings. Not sure.
-  //while( (gpio_get( GPIO_Z80_MREQ ) == 0) || (gpio_get( GPIO_Z80_IORQ ) == 0) );
-
   /*
    * Empirical testing shows the DMA initialisaiton setup takes at most 8.5us.
    * That's with a 200MHz overclock, but I'm not sure that makes much difference
@@ -140,29 +135,17 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
   /* Blipper goes low while DMA process is active */
   gpio_put( GPIO_BLIPPER1, 0 );
 
-  /*
-   * At 200MHz this loop takes:
-   *  16 bytes takes 10.5us
-   *  32 bytes takes 15.5us
-   *  64 bytes takes 25us
-   * Crudely speaking, the 10us difference between the time it takes to DMA 32 bytes
-   * and the time it takes to DMA 63 bytes is about 35 Z80 T-states, or about 9
-   * of the Z80's fastest instructions. So for now I'm going to limit the on-the-fly
-   * DMA transfer to 64 bytes and hard code the INT approaching signal. That seems a
-   * fair tradeoff between functionality and not losing too much time waiting for an
-   * approaching /INT.
-   */
-
-//gpio_put( 42, 0 );
-volatile uint32_t a=0;
+  /* Wait for rising edge of clock, syncs to start of T1 (Z80 manual fig 6, right side) */
+  while( gpio_get( GPIO_Z80_CLK ) == 0 );  
+    
   for( uint32_t byte_counter=0; byte_counter < length; byte_counter++ )
   {
-    /* Contents of this loop takes 435ns */
-    
-    /* Set up of buses takes ~150ns */
-
+  gpio_put( GPIO_BLIPPER1, 0 );
     /* Set address of ZX byte to write to */
     gpio_put_masked( GPIO_ABUS_BITMASK, (zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
+
+    /* Wait for falling edge of clock, that's halfway through T1 */
+    while( gpio_get( GPIO_Z80_CLK ) == 1 );  
 
     /* Assert memory request */
     gpio_put( GPIO_Z80_MREQ, 0 );
@@ -171,450 +154,35 @@ volatile uint32_t a=0;
     gpio_put_masked( GPIO_DBUS_BITMASK, *(src+byte_counter) );
 
     /*
+     * Wait for Z80 clock to rise and fall - that's at the clock low point halfway through T2
+     */
+    while( gpio_get( GPIO_Z80_CLK ) == 0 );    
+    while( gpio_get( GPIO_Z80_CLK ) == 1 );   
+
+    /*
      * Assert the write line to write it, the ULA responds to this and does
      * the write into the Spectrum's memory. i.e. the RAS/CAS stuff.
      */
     gpio_put( GPIO_Z80_WR, 0 );
 
     /*
-     * The timing theory:
-     * Spectrum RAM is rated 150ns which is 1.5e-07. RP2350 clock speed is
-     * 200,000,000Hz (overclocked), so one clock cycle is 5ns. So that's 30
-     * RP2350 clock cycles in one DRAM transaction time. NOP is T1, so it
-     * takes one clock cycle, so 30 NOPs should guarantee a pause long
-     * enough for the 4116s to respond.
-     * 
-     * I need to support both the original 4116s and the modern static RAM
-     * memory module boards. Whichever is slower is the minimum speed I
-     * run at.
+     * Wait for Z80 clock to rise and fall again - that takes us
+     * to the beginning of, and then the halfway point of, T3
      */
-#define USING_STATIC_RAM_MODULE 0
-#if USING_STATIC_RAM_MODULE
-  /*
-   * This was developed on a Spectrum containing a static RAM-based lower memory
-   * module. I thought it would be faster than the 4116s, so should work with
-   * fewer than 23 NOPs. Turns out it doesn't. Empirical testing shows at 150MHz
-   * shows it needs 29, which is 1.93e-07 seconds, or about 190 nanooseconds.
-   * 
-   * Update: it turns out that sometimes 29 is too few and the DMA doesn't work.
-   * This appears to be related to the Spectrum's temperature. The cooler the
-   * machine is the longer this delay needs to be - but again, this is with a
-   * static RAM module.
-   */
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
+    while( gpio_get( GPIO_Z80_CLK ) == 0 );    
 
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-#else
-  /*
-   * This was developed on a Spectrum containing the original 4116 RAM.
-   * It turns out these need more time than the static memory module. As of
-   * this writing I've given up trying to predict or interpret what's going
-   * on with the timings. Empirical testing shows it needs 37 RP2350 cycles
-   * at 150MHz. But I'm not sure that's right because when I overclocked to
-   * 200MHz to get the ROM emulation working this continued to work.
-   * At 200MHz each NOP takes 5ns; 37 of them take 185ns.
-   */
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-
-
-
-
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-
-        __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-    __asm volatile ("nop");
-
-
-#endif
-
-    /* Mirror and buses reset takes ~100ns */
-
-    /* Update local mirror to match the ZX RAM */
+    /* Sneak this in here - update local mirror to match the ZX RAM */
     put_zx_mirror_byte( zx_ram_location+byte_counter, *(src+byte_counter) );
+
+    while( gpio_get( GPIO_Z80_CLK ) == 1 );   
 
     /* Remove write and memory request */
     gpio_put( GPIO_Z80_WR,   1 );
     gpio_put( GPIO_Z80_MREQ, 1 ); 
+
+  gpio_put( GPIO_BLIPPER1, 1 );
+    /* Wait for the next rising edge of the clock - that's the end of T3 and the start of T1 */
+    while( gpio_get( GPIO_Z80_CLK ) == 0 );    
   }
 
   /*
