@@ -70,10 +70,15 @@ static int64_t load_test_program( alarm_id_t id, void *user_data )
   return 0;
 }
 
+#define OVERCLOCK 200000
 
 void main( void )
 {
   bi_decl(bi_program_description("ZX Spectrum Coprocessor Board Binary."));
+
+#ifdef OVERCLOCK
+  set_sys_clock_khz( OVERCLOCK, 1 );
+#endif
 
   /* All interrupts off except the timers */
 //  irq_set_mask_enabled( 0xFFFFFFFF, 0 );
@@ -98,6 +103,7 @@ void main( void )
   /* Blippers, for the scope */
   gpio_init( GPIO_BLIPPER1 ); gpio_set_dir( GPIO_BLIPPER1, GPIO_OUT ); gpio_put( GPIO_BLIPPER1, 1 );
   gpio_init( GPIO_BLIPPER2 ); gpio_set_dir( GPIO_BLIPPER2, GPIO_OUT ); gpio_put( GPIO_BLIPPER2, 1 );
+gpio_init( 42 ); gpio_set_dir( 42, GPIO_OUT ); gpio_put( 42, 1 );
  
   /* Set up Z80 control bus */  
   gpio_init( GPIO_Z80_CLK  );   gpio_set_dir( GPIO_Z80_CLK,  GPIO_IN );
@@ -117,6 +123,9 @@ void main( void )
   /* Initialise Z80 address bus GPIOs as inputs */
   gpio_init_mask( GPIO_ABUS_BITMASK );  gpio_set_dir_in_masked( GPIO_ABUS_BITMASK );
 
+  /* Let the Spectrum ROM do the ROM until we need to interfere */
+  gpio_init( GPIO_ROMCS ); gpio_set_dir( GPIO_ROMCS, GPIO_IN );
+
   /* Initialise the interrupt protection PIO and DMA system */
   init_dma_engine();
   init_interrupt_protection();
@@ -124,28 +133,17 @@ void main( void )
   /* Zero mirror memory */
   initialise_zx_mirror();
 
-  /* Take over the ZX ROM */
-  if( using_rom_emulation() )
-  {
-    /* We're emulating ROM, hold ROMCS permanently high and start the emulation running */
-    gpio_init( GPIO_ROMCS ); gpio_set_dir( GPIO_ROMCS, GPIO_OUT ); gpio_put( GPIO_ROMCS, 1 );
-    start_rom_emulation();
+  //init_rom_emulation();
 
-    /* Give the other core a moment to initialise */
-    sleep_ms( 100 );
-  }
-  else
-  {
-    /* Not emulating ROM, let the Spectrum's ROM chip do its normal thing */
-    gpio_init( GPIO_ROMCS ); gpio_set_dir( GPIO_ROMCS, GPIO_IN );
-  }
+  /* Give the other core a moment to initialise */
+  sleep_ms( 100 );
 
   if( using_z80_test_image() )
   {
     init_z80_test_image();
 
     /* The DMA stuff starts in a few seconds */
-    add_alarm_in_ms( 3000, load_test_program, NULL, 0 );
+    add_alarm_in_ms( 3011, load_test_program, NULL, 0 );
   }
 
   /* Let the Spectrum run */

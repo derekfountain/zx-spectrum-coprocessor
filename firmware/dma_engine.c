@@ -58,12 +58,12 @@ void activate_dma_queue_entry( void )
 {
   if( dma_queue[0].src != NULL )
   {
-    dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length, true );
+    dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length, false );
 
     dma_queue[0].src = NULL;
 
     // FIXME This is wrong, test image shouldn't be exposed here
-    if( using_z80_test_image() && using_rom_emulation() )
+    if( 0 && using_z80_test_image() )
     {
       /*
         * If we're using the Z80 test code and emulating the ROM, reset the Z80
@@ -92,15 +92,6 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
                        const uint32_t length, const uint32_t int_protection ) 
 {
   /*
-   * If the Z80 is doing a read, potentially from ROM, wait for it to end.
-   * The ROM emulation code wouldn't like to be interrupted.
-   */
-  if( using_rom_emulation() )
-  {
-    while( (gpio_get_all64() & RD_MREQ_MASK) == 0 );
-  }
-
-  /*
    * The Spectrum can't afford to miss an interrupt, so if one is approaching, spin
    * while it passes
    */
@@ -112,6 +103,11 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
      */
     while( interrupt_unsafe );
   }
+
+  // I don't know if this is required. The MREQ check is probably needed when my
+  // ROM emulation is running. The IORQ probably isn't needed, but there seems to
+  // be an issue with the ULA timings. Not sure.
+  //while( (gpio_get( GPIO_Z80_MREQ ) == 0) || (gpio_get( GPIO_Z80_IORQ ) == 0) );
 
   /*
    * Empirical testing shows the DMA initialisaiton setup takes at most 8.5us.
@@ -157,6 +153,8 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
    * approaching /INT.
    */
 
+//gpio_put( 42, 0 );
+volatile uint32_t a=0;
   for( uint32_t byte_counter=0; byte_counter < length; byte_counter++ )
   {
     /* Contents of this loop takes 435ns */
@@ -298,6 +296,315 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
 
     __asm volatile ("nop");
     __asm volatile ("nop");
+
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+
+
+
+
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+
+        __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+    __asm volatile ("nop");
+
+
 #endif
 
     /* Mirror and buses reset takes ~100ns */

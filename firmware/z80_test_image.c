@@ -69,6 +69,7 @@ Z80_TEST;
 /* Only one piece of test code for the time being, I could make an array if necessary */
 static Z80_TEST z80_test = {0};
 
+#include <string.h>
 void z80_test_image_set_pending( void )
 {
   add_dma_to_queue( z80_test.z80_code, z80_test.dest, z80_test.length );

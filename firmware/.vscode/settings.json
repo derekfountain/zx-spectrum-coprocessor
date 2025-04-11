@@ -7,6 +7,7 @@
       "z80_test_image.h": "c",
       "stdint.h": "c",
       "rom_emulation.h": "c",
-      "gpios.h": "c"
+      "gpios.h": "c",
+      "z80_image.h": "c"
     }
 }
