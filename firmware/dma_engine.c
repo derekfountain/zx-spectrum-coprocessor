@@ -58,13 +58,14 @@ void activate_dma_queue_entry( void )
 {
   if( dma_queue[0].src != NULL )
   {
-    dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length, false );
+    dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length, true );
 
     dma_queue[0].src = NULL;
 
     // FIXME This is wrong, test image shouldn't be exposed here
     if( 0 && using_z80_test_image() )
     {
+      // This doesn't work, and can't work. see comments in rom_emulation.c
       /*
         * If we're using the Z80 test code and emulating the ROM, reset the Z80
         * and set the flag which causes the JP 0x8000 at the start of the
@@ -87,6 +88,18 @@ void activate_dma_queue_entry( void )
  * due to the risk of the Spectrum missing the next /INT
  */
 static volatile uint32_t interrupt_unsafe = 0;
+
+/*
+ * I probably need to break this into 2 parts.
+ * For DMAs into 0x4000-0x7FFF I need to work at the speed of the ULA. I need to work in top border
+ * time so there's no contention and the ULA never stops the clock.
+ * 
+ * For DMAs into 0x8000-0xFFFF the ULA isn't involved and won't stop the clock. The RAS/CAS is done
+ * by 74 logic chips on the Spectrum's main board, so I need to run at their maximum speed.
+ * 
+ * I also need to check the DMA requested doesn't run across the 0x7FFF-0x8000 boundary, and is
+ * otherwise in sensible memory locations.
+ */
 
 void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
                        const uint32_t length, const uint32_t int_protection ) 
@@ -138,9 +151,23 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
   /* Wait for rising edge of clock, syncs to start of T1 (Z80 manual fig 6, right side) */
   while( gpio_get( GPIO_Z80_CLK ) == 0 );  
     
+#define USING_Z80_TIMINGS 1
+#if USING_Z80_TIMINGS    
+  /*
+   * This matches the Z80's timings on the bus. It syncs to the clock signal. As far as
+   * I can tell, the ULA can't tell the difference between the RP2350 running this code
+   * and the Z80 it normally writes memory for.
+   * 
+   * The contents of this loop takes 800ns per iteration, plus another 50ns for the loop.
+   * At 3.5MHz the 3-cycle write should take 857ns, so that looks right.
+   * 
+   * The problem here is that it's slow. A 6,912 byte screen contents DMA takes 5.92ms
+   * which is way slower than I'd like and nowhere near fast enough for top border time.
+   */
   for( uint32_t byte_counter=0; byte_counter < length; byte_counter++ )
   {
-  gpio_put( GPIO_BLIPPER1, 0 );
+  //gpio_put( GPIO_BLIPPER1, 1 );
+
     /* Set address of ZX byte to write to */
     gpio_put_masked( GPIO_ABUS_BITMASK, (zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
 
@@ -170,20 +197,73 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
      * to the beginning of, and then the halfway point of, T3
      */
     while( gpio_get( GPIO_Z80_CLK ) == 0 );    
-
-    /* Sneak this in here - update local mirror to match the ZX RAM */
-    put_zx_mirror_byte( zx_ram_location+byte_counter, *(src+byte_counter) );
-
     while( gpio_get( GPIO_Z80_CLK ) == 1 );   
+
+    /* Update local mirror to match the ZX RAM */
+    put_zx_mirror_byte( zx_ram_location+byte_counter, *(src+byte_counter) );
 
     /* Remove write and memory request */
     gpio_put( GPIO_Z80_WR,   1 );
     gpio_put( GPIO_Z80_MREQ, 1 ); 
 
-  gpio_put( GPIO_BLIPPER1, 1 );
-    /* Wait for the next rising edge of the clock - that's the end of T3 and the start of T1 */
+
+    /* Wait for the next rising edge of the clock - that's the end of T3 / start of T1 */
     while( gpio_get( GPIO_Z80_CLK ) == 0 );    
+  //gpio_put( GPIO_BLIPPER1, 0 );
   }
+#else
+  /*
+   * I need to drive the ULA's writes faster than the Z80 normally does. The question
+   * is, how fast can I go while retaining complete reliability?
+   */
+  for( uint32_t byte_counter=0; byte_counter < length; byte_counter++ )
+  {
+  gpio_put( GPIO_BLIPPER1, 1 );
+
+    /* Set address of ZX byte to write to */
+    gpio_put_masked( GPIO_ABUS_BITMASK, (zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
+
+    /* Wait for falling edge of clock, that's halfway through T1 */
+    while( gpio_get( GPIO_Z80_CLK ) == 1 );  
+
+    /* Assert memory request */
+    gpio_put( GPIO_Z80_MREQ, 0 );
+
+    /* Put value on the data bus */
+    gpio_put_masked( GPIO_DBUS_BITMASK, *(src+byte_counter) );
+
+    /*
+     * Wait for Z80 clock to rise and fall - that's at the clock low point halfway through T2
+     */
+    while( gpio_get( GPIO_Z80_CLK ) == 0 );    
+    while( gpio_get( GPIO_Z80_CLK ) == 1 );   
+
+    /*
+     * Assert the write line to write it, the ULA responds to this and does
+     * the write into the Spectrum's memory. i.e. the RAS/CAS stuff.
+     */
+    gpio_put( GPIO_Z80_WR, 0 );
+
+    /*
+     * Wait for Z80 clock to rise and fall again - that takes us
+     * to the beginning of, and then the halfway point of, T3
+     */
+    while( gpio_get( GPIO_Z80_CLK ) == 0 );    
+    while( gpio_get( GPIO_Z80_CLK ) == 1 );   
+
+    /* Update local mirror to match the ZX RAM */
+    put_zx_mirror_byte( zx_ram_location+byte_counter, *(src+byte_counter) );
+
+    /* Remove write and memory request */
+    gpio_put( GPIO_Z80_WR,   1 );
+    gpio_put( GPIO_Z80_MREQ, 1 ); 
+
+
+    /* Wait for the next rising edge of the clock - that's the end of T3 / start of T1 */
+    while( gpio_get( GPIO_Z80_CLK ) == 0 );    
+  gpio_put( GPIO_BLIPPER1, 0 );
+  }
+#endif
 
   /*
    * Empirical testing shows this DMA teardown takes at most 1.6us.

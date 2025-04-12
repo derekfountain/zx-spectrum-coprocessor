@@ -75,10 +75,12 @@ static void core1_rom_emulation( void )
       if( using_z80_test_image() && (initial_jp_destination != 0) && (address <= 0x0002) )
       {
         uint8_t data;
-
+//this isn't going to work because the multiple restarts of the z80
+//it passes through address 0 multiple times
         /* Inject JP to the z80 test code into bytes 0, 1 and 2 */
         if(      address == 0x0000 )
         {
+//  gpio_put( GPIO_BLIPPER2, 0 );
           gpio_set_dir( GPIO_ROMCS, GPIO_OUT ); gpio_put( GPIO_ROMCS, 1 );
           data = 0xc3;
         }
@@ -114,6 +116,7 @@ static void core1_rom_emulation( void )
         if( initial_jp_destination == 0 )
         {
           gpio_set_dir( GPIO_ROMCS, GPIO_IN );
+//  gpio_put( GPIO_BLIPPER2, 1 );
         }
 
       }

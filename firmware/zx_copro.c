@@ -133,7 +133,10 @@ gpio_init( 42 ); gpio_set_dir( 42, GPIO_OUT ); gpio_put( 42, 1 );
   /* Zero mirror memory */
   initialise_zx_mirror();
 
-  //init_rom_emulation();
+// reinistate the rom emulation and try triggering a Z80 WAIT for a few us
+// before the DMA is triggered. u think i'll need a hw mod to get WAIT.
+// nope, i brought WAIT out, but the direction is wrong on the schematic
+  init_rom_emulation();
 
   /* Give the other core a moment to initialise */
   sleep_ms( 100 );
@@ -143,7 +146,7 @@ gpio_init( 42 ); gpio_set_dir( 42, GPIO_OUT ); gpio_put( 42, 1 );
     init_z80_test_image();
 
     /* The DMA stuff starts in a few seconds */
-    add_alarm_in_ms( 3011, load_test_program, NULL, 0 );
+    add_alarm_in_ms( 3000, load_test_program, NULL, 0 );
   }
 
   /* Let the Spectrum run */
