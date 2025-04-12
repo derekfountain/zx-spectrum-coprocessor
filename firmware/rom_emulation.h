@@ -26,7 +26,8 @@
 
 uint32_t using_rom_emulation( void );
 
-void init_rom_emulation( void );
+void start_rom_emulation( void );
 void set_initial_jp( uint16_t dest );
+void reset_initial_jp( void );
 
 #endif

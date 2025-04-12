@@ -43,6 +43,7 @@
  * Testing shows 200MHz is fast enough for the time being. Comments in this code
  * are based on a 200MHz overclock.
  */
+
 static uint16_t initial_jp_destination = 0;
 
 void set_initial_jp( uint16_t dest )
@@ -50,9 +51,22 @@ void set_initial_jp( uint16_t dest )
   initial_jp_destination = dest;
 }
 
+void reset_initial_jp( void )
+{
+  initial_jp_destination = 0;
+}
+
+inline uint32_t using_rom_emulation( void )
+{
+#define EMULATE_ROM 0
+  return EMULATE_ROM;
+}
+
 static void core1_rom_emulation( void )
 {
   irq_set_mask_enabled( 0xFFFFFFFF, 0 );
+
+  initial_jp_destination = 0;
 
   while( 1 )
   {
@@ -72,28 +86,22 @@ static void core1_rom_emulation( void )
     if( (gpios & rd_mask) == 0 )
     {
       /* Ignore reads from anywhere other than ROM, the Spectrum still reads its own RAM (Approx 15ns) */
-      if( using_z80_test_image() && (initial_jp_destination != 0) && (address <= 0x0002) )
+      if( address <= 0x3FFF )
       {
-        uint8_t data;
-//this isn't going to work because the multiple restarts of the z80
-//it passes through address 0 multiple times
-        /* Inject JP to the z80 test code into bytes 0, 1 and 2 */
-        if(      address == 0x0000 )
+        /* Pick up ROM byte from local image */
+        uint8_t data = *(_48_original_rom+address);
+#if 0
+        if( using_z80_test_image() )
         {
-//  gpio_put( GPIO_BLIPPER2, 0 );
-          gpio_set_dir( GPIO_ROMCS, GPIO_OUT ); gpio_put( GPIO_ROMCS, 1 );
-          data = 0xc3;
+          /* Inject JP to the z80 test code into bytes 0, 1 and 2 */
+          if( initial_jp_destination != 0 )
+          {
+            if(      address == 0x0000 ) data = 0xc3;
+            else if( address == 0x0001 ) data = (uint8_t)(initial_jp_destination & 0xFF);
+            else if( address == 0x0002 ) data = (uint8_t)((initial_jp_destination >> 8) & 0xFF);
+          }
         }
-        else if( address == 0x0001 )
-        {
-          data = (uint8_t)(initial_jp_destination & 0xFF);
-        }
-        else if( address == 0x0002 )
-        {
-          data = (uint8_t)((initial_jp_destination >> 8) & 0xFF);
-          initial_jp_destination = 0;
-        }
-
+#endif
         /* Set the data bus to outputs */
         gpio_set_dir_out_masked64( GPIO_DBUS_BITMASK );
 
@@ -112,15 +120,16 @@ static void core1_rom_emulation( void )
 
         /* Z80 has picked up the byte, put data bus back to inputs */
         gpio_set_dir_in_masked64( GPIO_DBUS_BITMASK );
-
-        if( initial_jp_destination == 0 )
-        {
-          gpio_set_dir( GPIO_ROMCS, GPIO_IN );
-//  gpio_put( GPIO_BLIPPER2, 1 );
-        }
-
       }
-
+      else
+      {
+        /*
+          * It's a read from RAM, the Spectrum's RAM chips will field it.
+          * Just wait for the read to finish we don't loop continuously
+          * while this read is on the Z80 control bus
+          */
+        while( (gpio_get_all64() & mreq_mask) == 0 );        
+      }
     }
     else if( (gpios & wr_mask) == 0 )
     {
@@ -154,8 +163,7 @@ static void core1_rom_emulation( void )
 }
 
 
-void init_rom_emulation( void )
+void start_rom_emulation( void )
 {
-  initial_jp_destination = 0;
   multicore_launch_core1( core1_rom_emulation );
 }
