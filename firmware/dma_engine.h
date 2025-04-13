@@ -30,6 +30,7 @@ uint32_t is_dma_queue_full( void );
 void activate_dma_queue_entry( void );
 
 void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
-                       const uint32_t length, const uint32_t int_protection );
+                       const uint32_t length, const uint32_t incr,
+                       const uint32_t int_protection );
 
 #endif

@@ -21,6 +21,7 @@
 #include "gpios.h"
 #include "hardware/gpio.h"
 #include "cmd_immediate.h"
+#include "dma_engine.h"
 #include "zx_mirror.h"
 
 static uint32_t cmd_pending = 0;
@@ -58,9 +59,14 @@ inline uint32_t is_immediate_cmd_pending( void )
 
 
 
-void immediate_cmd_memset( MEMSET_CMD *memset_cmd_ptr )
+static void immediate_cmd_memset( MEMSET_CMD *memset_cmd_ptr )
 {
+  const uint8_t  *src    = &(memset_cmd_ptr->c);
+  const uint16_t  zx_addr = memset_cmd_ptr->zx_addr[0] + memset_cmd_ptr->zx_addr[1]*256;
+  const uint16_t  n       = memset_cmd_ptr->n[0] + memset_cmd_ptr->n[1]*256;
+
   gpio_put( GPIO_BLIPPER1, 0 );
+  dma_memory_block( src, zx_addr, n, 0, true );
 }
 
 void service_immediate_cmd( void )

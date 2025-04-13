@@ -42,9 +42,9 @@ uint16_t query_immediate_cmd_address( void );
 #define CMD_MEMSET_TYPE ((uint8_t)128)
 typedef struct _memset_cmd
 {
-  uint16_t zx_addr;
+  uint8_t zx_addr[2];
   uint8_t  c;
-  uint16_t n;
+  uint8_t n[2];
 } MEMSET_CMD;
 
 

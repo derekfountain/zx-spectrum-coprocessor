@@ -58,7 +58,7 @@ void activate_dma_queue_entry( void )
 {
   if( dma_queue[0].src != NULL )
   {
-    dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length, true );
+    dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length, 1, true );
 
     dma_queue[0].src = NULL;
 
@@ -102,7 +102,8 @@ static volatile uint32_t interrupt_unsafe = 0;
  */
 
 void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
-                       const uint32_t length, const uint32_t int_protection ) 
+                       const uint32_t length, const uint32_t incr,
+                       const uint32_t int_protection ) 
 {
   /*
    * The Spectrum can't afford to miss an interrupt, so if one is approaching, spin
@@ -164,9 +165,10 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
    * The problem here is that it's slow. A 6,912 byte screen contents DMA takes 5.92ms
    * which is way slower than I'd like and nowhere near fast enough for top border time.
    */
+  uint32_t offset = 0;
   for( uint32_t byte_counter=0; byte_counter < length; byte_counter++ )
   {
-  //gpio_put( GPIO_BLIPPER1, 1 );
+  gpio_put( GPIO_BLIPPER1, 1 );
 
     /* Set address of ZX byte to write to */
     gpio_put_masked( GPIO_ABUS_BITMASK, (zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
@@ -178,7 +180,8 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
     gpio_put( GPIO_Z80_MREQ, 0 );
 
     /* Put value on the data bus */
-    gpio_put_masked( GPIO_DBUS_BITMASK, *(src+byte_counter) );
+    gpio_put_masked( GPIO_DBUS_BITMASK, *(src+offset) );
+    offset += incr;
 
     /*
      * Wait for Z80 clock to rise and fall - that's at the clock low point halfway through T2
@@ -209,7 +212,7 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
 
     /* Wait for the next rising edge of the clock - that's the end of T3 / start of T1 */
     while( gpio_get( GPIO_Z80_CLK ) == 0 );    
-  //gpio_put( GPIO_BLIPPER1, 0 );
+  gpio_put( GPIO_BLIPPER1, 0 );
   }
 #else
   /*
