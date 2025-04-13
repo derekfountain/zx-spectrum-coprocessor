@@ -21,6 +21,7 @@
 #include "gpios.h"
 #include "hardware/gpio.h"
 #include "cmd_immediate.h"
+#include "zx_mirror.h"
 
 static uint32_t cmd_pending = 0;
 
@@ -55,8 +56,30 @@ inline uint32_t is_immediate_cmd_pending( void )
   return cmd_pending;
 }
 
-void service_immediate_cmd( void )
+
+
+void immediate_cmd_memset( MEMSET_CMD *memset_cmd_ptr )
 {
-  cmd_pending = 0; 
+  gpio_put( GPIO_BLIPPER1, 0 );
 }
 
+void service_immediate_cmd( void )
+{
+  uint16_t cmd_zx_addr = query_immediate_cmd_address();
+  const CMD *cmd_ptr = query_zx_mirror_ptr( cmd_zx_addr );
+
+  switch( cmd_ptr->type )
+  {
+    case CMD_MEMSET_TYPE:
+    {
+      immediate_cmd_memset( (MEMSET_CMD*)((uint8_t*)cmd_ptr + sizeof( CMD )) );
+    }
+    break;
+
+    default:
+      // Need to the set the CMD's error to unknown
+      break;
+  }
+
+  cmd_pending = 0; 
+}

@@ -24,9 +24,16 @@
 
 #include "pico/sync.h"
 
+typedef enum
+{
+  FULL_ROM_EMULATION,
+  RAM_MIRROR_ONLY
+}
+EMULATION_MODE;
+
 uint32_t using_rom_emulation( void );
 
-void start_rom_emulation( void );
+void start_rom_emulation( EMULATION_MODE );
 void set_initial_jp( uint16_t dest );
 void reset_initial_jp( void );
 

@@ -62,6 +62,8 @@ inline uint32_t using_rom_emulation( void )
   return EMULATE_ROM;
 }
 
+static EMULATION_MODE emulation_mode;
+
 static void core1_rom_emulation( void )
 {
   irq_set_mask_enabled( 0xFFFFFFFF, 0 );
@@ -85,50 +87,58 @@ static void core1_rom_emulation( void )
     /* Is it a read that's happening? (Approx 35ns) */
     if( (gpios & rd_mask) == 0 )
     {
-      /* Ignore reads from anywhere other than ROM, the Spectrum still reads its own RAM (Approx 15ns) */
-      if( address <= 0x3FFF )
+      if( emulation_mode == FULL_ROM_EMULATION )
       {
-        /* Pick up ROM byte from local image */
-        uint8_t data = *(_48_original_rom+address);
-#if 0
-        if( using_z80_test_image() )
+        /* Ignore reads from anywhere other than ROM, the Spectrum still reads its own RAM (Approx 15ns) */
+        if( address <= 0x3FFF )
         {
-          /* Inject JP to the z80 test code into bytes 0, 1 and 2 */
-          if( initial_jp_destination != 0 )
+          /* Pick up ROM byte from local image */
+          uint8_t data = *(_48_original_rom+address);
+#if 0
+          if( using_z80_test_image() )
           {
-            if(      address == 0x0000 ) data = 0xc3;
-            else if( address == 0x0001 ) data = (uint8_t)(initial_jp_destination & 0xFF);
-            else if( address == 0x0002 ) data = (uint8_t)((initial_jp_destination >> 8) & 0xFF);
+            /* Inject JP to the z80 test code into bytes 0, 1 and 2 */
+            if( initial_jp_destination != 0 )
+            {
+              if(      address == 0x0000 ) data = 0xc3;
+              else if( address == 0x0001 ) data = (uint8_t)(initial_jp_destination & 0xFF);
+              else if( address == 0x0002 ) data = (uint8_t)((initial_jp_destination >> 8) & 0xFF);
+              }
+            }
           }
-        }
 #endif
-        /* Set the data bus to outputs */
-        gpio_set_dir_out_masked64( GPIO_DBUS_BITMASK );
+          /* Set the data bus to outputs */
+          gpio_set_dir_out_masked64( GPIO_DBUS_BITMASK );
 
-        /* Write the value out to the Z80 */
-        gpio_put_masked64( GPIO_DBUS_BITMASK, (data & 0xFF) << GPIO_DBUS_D0 );
+          /* Write the value out to the Z80 */
+          gpio_put_masked64( GPIO_DBUS_BITMASK, (data & 0xFF) << GPIO_DBUS_D0 );
 
-        /*
-         * As of this point the data is on the bus ready for the CPU to read it.
-         * The read happens 428ns after MREQ goes low. This point is reached
-         * after approx 300ns to 375ns. With a 270MHz overclock the data is
-         * consistently ready about 200ns to 220ns after MREQ goes low.
-         */
+          /*
+           * As of this point the data is on the bus ready for the CPU to read it.
+           * The read happens 428ns after MREQ goes low. This point is reached
+           * after approx 300ns to 375ns. With a 270MHz overclock the data is
+           * consistently ready about 200ns to 220ns after MREQ goes low.
+           */
       
-        /* Wait for the Z80's read to finish */
-        while( (gpio_get_all64() & mreq_mask) == 0 );
+          /* Wait for the Z80's read to finish */
+          while( (gpio_get_all64() & mreq_mask) == 0 );
 
-        /* Z80 has picked up the byte, put data bus back to inputs */
-        gpio_set_dir_in_masked64( GPIO_DBUS_BITMASK );
+          /* Z80 has picked up the byte, put data bus back to inputs */
+          gpio_set_dir_in_masked64( GPIO_DBUS_BITMASK );
+        }
+        else
+        {
+          /*
+           * It's a read from RAM, the Spectrum's RAM chips will field it.
+           * Just wait for the read to finish we don't loop continuously
+           * while this read is on the Z80 control bus
+           */
+          while( (gpio_get_all64() & mreq_mask) == 0 );
+        }
       }
       else
       {
-        /*
-          * It's a read from RAM, the Spectrum's RAM chips will field it.
-          * Just wait for the read to finish we don't loop continuously
-          * while this read is on the Z80 control bus
-          */
-        while( (gpio_get_all64() & mreq_mask) == 0 );        
+        /* It's a read, but we're not emulating the ZX ROM. Ignore it. */
       }
     }
     else if( (gpios & wr_mask) == 0 )
@@ -163,7 +173,8 @@ static void core1_rom_emulation( void )
 }
 
 
-void start_rom_emulation( void )
+void start_rom_emulation( EMULATION_MODE mode )
 {
+  emulation_mode = mode;
   multicore_launch_core1( core1_rom_emulation );
 }

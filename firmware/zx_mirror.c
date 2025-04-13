@@ -39,6 +39,11 @@ inline void put_zx_mirror_byte( uint32_t offset, uint8_t value )
   zx_memory_mirror[offset] = value;
 }
 
+const void *query_zx_mirror_ptr( uint16_t offset )
+{
+  return &zx_memory_mirror[offset];
+}
+
 void initialise_zx_mirror( void )
 {
   for( uint32_t i=0; i < ZX_MEMORY_SIZE; i++ )

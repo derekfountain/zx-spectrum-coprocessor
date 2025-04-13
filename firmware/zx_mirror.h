@@ -28,4 +28,6 @@ void initialise_zx_mirror( void );
 uint8_t get_zx_mirror_byte( uint32_t offset );
 void put_zx_mirror_byte( uint32_t offset, uint8_t value );
 
+const void *query_zx_mirror_ptr( uint16_t offset );
+
 #endif

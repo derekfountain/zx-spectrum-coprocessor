@@ -138,16 +138,17 @@ gpio_init( 42 ); gpio_set_dir( 42, GPIO_OUT ); gpio_put( 42, 1 );
   {
     /* We're emulating ROM, hold ROMCS permanently high and start the emulation running */
     gpio_init( GPIO_ROMCS ); gpio_set_dir( GPIO_ROMCS, GPIO_OUT ); gpio_put( GPIO_ROMCS, 1 );
-    start_rom_emulation();
-
-    /* Give the other core a moment to initialise */
-    sleep_ms( 100 );
+    start_rom_emulation( FULL_ROM_EMULATION );
   }
   else
   {
     /* Not emulating ROM, let the Spectrum's ROM chip do its normal thing */
     gpio_init( GPIO_ROMCS ); gpio_set_dir( GPIO_ROMCS, GPIO_IN );
+    start_rom_emulation( RAM_MIRROR_ONLY );
   }
+
+  /* Give the other core a moment to initialise */
+  sleep_ms( 100 );
 
   /* Give the other core a moment to initialise */
   sleep_ms( 100 );
