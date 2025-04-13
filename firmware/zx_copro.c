@@ -170,28 +170,31 @@ gpio_init( 42 ); gpio_set_dir( 42, GPIO_OUT ); gpio_put( 42, 1 );
    */
   while( 1 )
   {
+    const uint64_t immediate_cmd_trigger_mask       = IMMEDIATE_CMD_TRIGGER_MASK;
+    const uint64_t immediate_cmd_trigger_pattern_hi = IMMEDIATE_CMD_TRIGGER_PATTERN_HI;
+    const uint64_t immediate_cmd_trigger_pattern_lo = IMMEDIATE_CMD_TRIGGER_PATTERN_LO;
+
+    // FIXME PIO would be a lot more efficient than this
+    //
+    uint64_t gpios;
+    uint8_t  data_bus;
+    if( ((gpios=gpio_get_all64()) & immediate_cmd_trigger_mask) == immediate_cmd_trigger_pattern_lo )
+    {
+      /* Z80 is writing to the immediate command register low byte */
+      cache_immediate_cmd_address_lo( (gpios>>GPIO_DBUS_D0) & GPIO_DBUS_BITMASK );
+    }
+    else if( (gpios & immediate_cmd_trigger_mask) == immediate_cmd_trigger_pattern_hi )
+    {
+      /* Z80 is writing to the immediate command register high byte */
+      cache_immediate_cmd_address_hi( (gpios>>GPIO_DBUS_D0) & GPIO_DBUS_BITMASK );
+    }
+
+
     if( is_immediate_cmd_pending() )
     {
       service_immediate_cmd();
     }
 
-    /* Tight loop here, looking for:
-       Write to 5b00, which is first byte after screen, first byte of printer buffer
-         let's use that for now.
-         z80 user guide says ld (nnn),hl loads nnn first, then nnn+1
-          fuse code agrees
-        pick up address being written when 5b01 changes
-          this will probably work for now
-          so spin looking for mreq, write and 5b01 on the bus? PIO would be more efficient
-        if a value is written into that location
-          assume it's a immediate result command
-            but i can't assume the zx will pause and wait for the result
-              the z80 might run another couple of instructions while the copro does the task
-            but i can say that only one command is in flight at a time, so spining on that address can stop
-          carry out the operation, DMA the result back
-          DMA 0 back to 5b00 to clear it, that's what the z80 can spin on
-            i'll need to DMA scatter-gather return thing implemented
-            */
 
     /*
      * If there's something in the DMA queue, activate it.

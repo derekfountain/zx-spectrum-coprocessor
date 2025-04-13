@@ -18,14 +18,45 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include "gpios.h"
+#include "hardware/gpio.h"
 #include "cmd_immediate.h"
+
+static uint32_t cmd_pending = 0;
+
+static uint8_t cmd_address_lo;
+void cache_immediate_cmd_address_lo( uint8_t data )
+{
+  cmd_address_lo = data;
+
+  /* For now, assume this is the first half of a 16-bit write */
+  cmd_pending = 0;
+}
+
+static uint8_t cmd_address_hi;
+void cache_immediate_cmd_address_hi( uint8_t data )
+{
+  cmd_address_hi = data;
+
+  /*
+   * For now, assume this is the second half of a 16-bit write and that the
+   * value is now available
+   */
+  cmd_pending = 1;
+}
+
+uint16_t query_immediate_cmd_address( void )
+{
+  return (cmd_address_hi << 8) + cmd_address_lo;
+}
 
 inline uint32_t is_immediate_cmd_pending( void )
 {
-  return 0;
+  return cmd_pending;
 }
 
 void service_immediate_cmd( void )
 {
-  
+  cmd_pending = 0; 
 }
+

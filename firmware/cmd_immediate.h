@@ -22,7 +22,20 @@
 
 #include <stdint.h>
 
+/* This is an unused location in the ROM, unlikely to be written to accidently */
+#define IMMEDIATE_CMD_TRIGGER_REG     ((uint64_t)0x386E)
+
+/* I'm looking for a memory (MREQ) read (RD) from the address bus. This masks out all other GPIOs */
+#define IMMEDIATE_CMD_TRIGGER_MASK    (GPIO_ABUS_BITMASK | WR_MREQ_MASK)
+
+/* So mask in the above GPIOs and see if the result is one of these. (RD and MREQ need to be 0) */
+#define IMMEDIATE_CMD_TRIGGER_PATTERN_LO (IMMEDIATE_CMD_TRIGGER_REG<<GPIO_ABUS_A0)
+#define IMMEDIATE_CMD_TRIGGER_PATTERN_HI ((IMMEDIATE_CMD_TRIGGER_REG+1)<<GPIO_ABUS_A0)
+
 uint32_t is_immediate_cmd_pending( void );
 void     service_immediate_cmd( void );
+void     cache_immediate_cmd_address_lo( uint8_t data );
+void     cache_immediate_cmd_address_hi( uint8_t data );
+uint16_t query_immediate_cmd_address( void );
 
 #endif
