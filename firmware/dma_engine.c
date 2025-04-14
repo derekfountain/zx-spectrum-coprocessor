@@ -23,7 +23,7 @@
 #include "dma_engine.h"
 
 #include "gpios.h"
-#include "rom_emulation.h"
+#include "zx_memory_management.h"
 #include "zx_mirror.h"
 
 #include "hardware/pio.h"

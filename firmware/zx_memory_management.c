@@ -23,7 +23,7 @@
 #include "pico/multicore.h"
 #include "hardware/clocks.h"
 
-#include "rom_emulation.h"
+#include "zx_memory_management.h"
 #include "rom.h"
 #include "zx_mirror.h"
 #include "z80_test_image.h"
@@ -62,6 +62,11 @@ inline uint32_t using_rom_emulation( void )
   return EMULATE_ROM;
 }
 
+/*
+ * As things stand:
+ * ROM emulation can be on of off. It's only really used for testing.
+ * Mirroring the Spectrum's RAM is always enabled.
+ */
 static EMULATION_MODE emulation_mode;
 
 static void core1_rom_emulation( void )

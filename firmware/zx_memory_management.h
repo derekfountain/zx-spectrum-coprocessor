@@ -17,8 +17,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef __ROM_EMULATION_H
-#define __ROM_EMULATION_H
+#ifndef __ZX_MEMORY_MANAGEMENT_H
+#define __ZX_MEMORY_MANAGEMENT_H
 
 #include <stdint.h>
 

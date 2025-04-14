@@ -14,7 +14,7 @@ set(PICO_COPY_TO_RAM 1)
 
 add_executable(zx_copro
 zx_copro.c
-rom_emulation.c
+zx_memory_management.c
 zx_mirror.c
 dma_engine.c
 cmd_immediate.c

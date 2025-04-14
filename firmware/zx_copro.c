@@ -40,7 +40,7 @@
 #include "pico/multicore.h"
 
 #include "dma_engine.h"
-#include "rom_emulation.h"
+#include "zx_memory_management.h"
 #include "zx_mirror.h"
 #include "z80_test_image.h"
 #include "cmd_immediate.h"
