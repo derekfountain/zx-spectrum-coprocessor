@@ -64,7 +64,6 @@ static void test_blipper( void )
  */
 static int64_t load_test_program( alarm_id_t id, void *user_data )
 {
-  // CONF alarm is goin goff
   z80_test_image_set_pending();
 
   return 0;
@@ -103,7 +102,6 @@ void main( void )
   /* Blippers, for the scope */
   gpio_init( GPIO_BLIPPER1 ); gpio_set_dir( GPIO_BLIPPER1, GPIO_OUT ); gpio_put( GPIO_BLIPPER1, 1 );
   gpio_init( GPIO_BLIPPER2 ); gpio_set_dir( GPIO_BLIPPER2, GPIO_OUT ); gpio_put( GPIO_BLIPPER2, 1 );
-gpio_init( 42 ); gpio_set_dir( 42, GPIO_OUT ); gpio_put( 42, 1 );
  
   /* Set up Z80 control bus */  
   gpio_init( GPIO_Z80_CLK  );   gpio_set_dir( GPIO_Z80_CLK,  GPIO_IN );
@@ -146,9 +144,6 @@ gpio_init( 42 ); gpio_set_dir( 42, GPIO_OUT ); gpio_put( 42, 1 );
     gpio_init( GPIO_ROMCS ); gpio_set_dir( GPIO_ROMCS, GPIO_IN );
     start_rom_emulation( RAM_MIRROR_ONLY );
   }
-
-  /* Give the other core a moment to initialise */
-  sleep_ms( 100 );
 
   /* Give the other core a moment to initialise */
   sleep_ms( 100 );

@@ -1,0 +1,34 @@
+This was taken from a build which turned off the alarm()
+call to start the DMA. Instead it used a busy_wait_ms().
+The ROM emulation was not running.
+
+I couldn't get the ZX to crash with this build, and the
+trace loads the 2 bytes of DMAed data correctly. That's
+typically the case with no ROM emulation.
+
+The IORQ permanently low mystery persists here, which is
+why I think there are Z80 errors.
+
+
+
+The no_glitch_2byte_dma capture hows the trigger on BLIP1,
+and the bus request/ack at the dashed line. There's about
+150 samples between them, which at 14MHz is 143us. The 3
+Z80 instructions between the blipper and the BUSREQ look
+correct, that's keyboard ROM code. Those few bytes were
+correctly delivered by the ROM chip.
+
+The BIT 5,(IY+1) instruction takes 79 samples according to
+the span of the instruction in the decode (including the
+00 operand, which I'm not sure about). That's 19.75
+T-states. Z80 manual says 20Ts for that instruction so
+it seems right. See no_glitch_2byte_dma_bit_instr.png - the
+shaded area is the instruction at 19.75Ts.
+
+The Z80 decode on the trace shows the span of the BIT instruction
+in cyan, and the CB 01 6E sequence in green. The empty green
+section before the CB has the databus containing FD, which is
+how the Z80 manual describes it. M1 is high for the first half
+of that byte, only going low at the halfway point of the FD.
+Not sure how this works, the FD is cleared at the point the
+M1 goes low. But it works so it must be how the Z80 does it.

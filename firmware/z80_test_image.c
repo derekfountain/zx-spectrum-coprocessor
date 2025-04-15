@@ -51,7 +51,7 @@ static inline uint16_t get_z80_test_image_length( void )
 
 inline uint32_t using_z80_test_image( void )
 {
-#define USE_Z80_TEST_IMAGE 0
+#define USE_Z80_TEST_IMAGE 1
   return USE_Z80_TEST_IMAGE;
 }
 

@@ -4,3 +4,10 @@ TAGS
 fp-info-cache
 *-backups
 build/
+
+*.lis
+*.c.lis
+*.bin
+*.lck
+z80_image
+*\#**

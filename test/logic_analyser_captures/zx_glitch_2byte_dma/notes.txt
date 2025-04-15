@@ -1,0 +1,37 @@
+This capture came with ROM emulation running. It caused a
+glitch on the Spectrum.
+
+There's about 100 samples between the blip trigger (white
+line) and the BUSREQ going low.
+
+The decode before the trigger looks dubuious. The
+CALL NZ, 111Dh appears to be from 10ACh, which could be OK.
+The call wasn't taken and the next instruction at 10AFh is
+a AND A as shown. Seems right.
+
+But then what happens? The trace shows reads from around the
+correct location, but one byte increments on the address bus,
+which isn't right. M1 looks maybe right, but there's garbage
+on the data bus.
+
+There's a period of maybe 500 samples before the blipper where
+things don't look right. That's about 35us.
+
+The RET Z then looks correct, that returning to 15FEh, where
+there's a POP HL, EXX, RET sequence just as shown.
+
+So in fact there appears to be just one instruction lost: the
+BIT 5,(IY+$01) instruction at 1080h appears to have been
+corrupted. That instruction assembles to FD CB 01 6E which
+appears on the bus. Actually, the FD doesn't appear, which is
+maybe why the Z80 decoder doesn't see it. , but there's an FF, and a 00 00 pair in
+there too. See bad_bit_instr.png.
+
+good_bit_inst.png is from a different trace (with the ZX ROM
+doing the work) and shows how that instruction should look.
+The FD doesn't appear on the data bus, which is odd. CB is
+there, and the rest. The timing looks the match the working
+version. It's the values on the bus whuch look wrong.
+
+I think this one came with the alarm() call on the RP, but I
+can't be sure now.

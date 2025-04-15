@@ -1,0 +1,13 @@
+Captured a 6000 byte DMA transfer which resulted in
+bad data in the Spectrum. Trigger was on blipper1.
+
+Matched up against a emulated Spectrum, the memory dump
+of the real machine is different.
+
+Byte 65 is 0xED, 237 decimal. That's the value transferred.
+Emulator shows that.
+
+In the real Spectrum byte 65 is 0x2B, 43 decimal.
+(Second byte on line 8 of the photo.) Logic analyser
+shows ED was on the bus.
+
