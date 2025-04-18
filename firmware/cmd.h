@@ -22,11 +22,26 @@
 
 #include <stdint.h>
 
-typedef struct _cmd
+/*
+ * These are the commands the coprocessor is able to fulfill.
+ */
+typedef enum
 {
-  uint8_t type;
-  uint8_t result;
-  uint8_t error; 
-} CMD;
+  ZXCOPRO_MEMSET_SMALL  = 128,
+  ZXCOPRO_MEMSET_LARGE,          // FIXME Still not sure if commands which run on /int should be separate or flagged
+}
+ZXCOPRO_CMD;
+
+/*
+ * This structure defines a coprocessor request. It starts on the Spectrum
+ * from where the coprocessor reads its contents.
+ */
+typedef struct _cmd_struct
+{
+  ZXCOPRO_CMD type;
+  uint8_t     result;
+  uint8_t     error; 
+}
+CMD_STRUCT;
 
 #endif

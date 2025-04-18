@@ -17,6 +17,7 @@ zx_copro.c
 zx_memory_management.c
 zx_mirror.c
 dma_engine.c
+cmd.c
 cmd_immediate.c
 z80_test_image.c
 )

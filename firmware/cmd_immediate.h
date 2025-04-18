@@ -29,7 +29,7 @@
 /* I'm looking for a memory (MREQ) write (WR) from the address bus. This masks out all other GPIOs */
 #define IMMEDIATE_CMD_TRIGGER_MASK    (GPIO_ABUS_BITMASK | WR_MREQ_MASK)
 
-/* So mask in the above GPIOs and see if the result is one of these. (WR and MREQ need to be 0) */
+/* Mask in the above GPIOs and see if the result is one of these. (WR and MREQ need to be 0) */
 #define IMMEDIATE_CMD_TRIGGER_PATTERN_LO (IMMEDIATE_CMD_TRIGGER_REG<<GPIO_ABUS_A0)
 #define IMMEDIATE_CMD_TRIGGER_PATTERN_HI ((IMMEDIATE_CMD_TRIGGER_REG+1)<<GPIO_ABUS_A0)
 
@@ -37,14 +37,18 @@ uint32_t is_immediate_cmd_pending( void );
 void     service_immediate_cmd( void );
 void     cache_immediate_cmd_address_lo( uint8_t data );
 void     cache_immediate_cmd_address_hi( uint8_t data );
-uint16_t query_immediate_cmd_address( void );
 
-#define CMD_MEMSET_TYPE ((uint8_t)128)
+/*
+ * memset, memory set coprocessor command
+ *
+ * This is for testing more than anything. I can set screen values, or small areas
+ * of the upper RAM with it. It's faster than an LDIR memset.
+ */
 typedef struct _memset_cmd
 {
-  uint8_t zx_addr[2];
-  uint8_t  c;
-  uint8_t n[2];
+  uint8_t zx_addr[2];   /* Z80 16 bit, low endian address in ZX memory */
+  uint8_t  c;           /* The constant to set */
+  uint8_t n[2];         /* Z80 16 bit, low endian count of bytes to set */
 } MEMSET_CMD;
 
 
