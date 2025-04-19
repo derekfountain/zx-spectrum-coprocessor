@@ -33,14 +33,38 @@ typedef enum
 ZXCOPRO_CMD;
 
 /*
+ * Valid responses from the coprocessor back into the Spectrum's memory.
+ * These are for the high level command structure. Individual commands
+ * will have error values of their own.
+ */
+typedef enum
+{
+  ZXCOPRO_OK = 1,             /* Assume the Z80 starts with it as 0, so non-zero starting point here */
+  ZXCOPRO_CMD_ERROR,
+}
+ZXCOPRO_RESPONSE;
+
+/*
+ * Error codes for the command structure.
+ */
+typedef enum
+{
+  ZXCOPRO_CMD_ERR_BAD_STRUCT = 1,
+  ZXCOPRO_CMD_ERR_UNKNOWN_CMD,
+
+  ZXCOPRO_CMD_ERR_LAST
+}
+ZXCOPRO_ERROR;
+
+/*
  * This structure defines a coprocessor request. It starts on the Spectrum
  * from where the coprocessor reads its contents.
  */
 typedef struct _cmd_struct
 {
-  ZXCOPRO_CMD type;
-  uint8_t     result;
-  uint8_t     error; 
+  ZXCOPRO_CMD      type;
+  ZXCOPRO_RESPONSE response;
+  ZXCOPRO_ERROR    error; 
 }
 CMD_STRUCT;
 
