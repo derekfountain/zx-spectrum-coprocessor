@@ -22,6 +22,14 @@
 
 #include <stdint.h>
 
+typedef struct _dma_block
+{
+  uint8_t  *src;
+  uint32_t  zx_ram_location;
+  uint32_t  length;
+  uint32_t  incr;
+} DMA_BLOCK;
+
 void init_dma_engine( void );
 void init_interrupt_protection( void );
 
@@ -29,8 +37,7 @@ void add_dma_to_queue( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
 uint32_t is_dma_queue_full( void );
 void activate_dma_queue_entry( void );
 
-void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
-                       const uint32_t length, const uint32_t incr,
+void dma_memory_block( const DMA_BLOCK *data_block,
                        const uint32_t int_protection );
 
 #endif

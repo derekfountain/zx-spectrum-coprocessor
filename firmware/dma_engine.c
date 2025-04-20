@@ -58,7 +58,9 @@ void activate_dma_queue_entry( void )
 {
   if( dma_queue[0].src != NULL )
   {
-    dma_memory_block( dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length, 1, true );
+    DMA_BLOCK block = { dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length, 1 };
+
+    dma_memory_block( &block, true );
 
     dma_queue[0].src = NULL;
 
@@ -101,8 +103,7 @@ static volatile uint32_t interrupt_unsafe = 0;
  * otherwise in sensible memory locations.
  */
 
-void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
-                       const uint32_t length, const uint32_t incr,
+void dma_memory_block( const DMA_BLOCK *data_block,
                        const uint32_t int_protection ) 
 {
   /*
@@ -166,12 +167,12 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
    * which is way slower than I'd like and nowhere near fast enough for top border time.
    */
   uint32_t offset = 0;
-  for( uint32_t byte_counter=0; byte_counter < length; byte_counter++ )
+  for( uint32_t byte_counter=0; byte_counter < data_block->length; byte_counter++ )
   {
   gpio_put( GPIO_BLIPPER1, 1 );
 
     /* Set address of ZX byte to write to */
-    gpio_put_masked( GPIO_ABUS_BITMASK, (zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
+    gpio_put_masked( GPIO_ABUS_BITMASK, (data_block->zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
 
     /* Wait for falling edge of clock, that's halfway through T1 */
     while( gpio_get( GPIO_Z80_CLK ) == 1 );  
@@ -180,8 +181,8 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
     gpio_put( GPIO_Z80_MREQ, 0 );
 
     /* Put value on the data bus */
-    gpio_put_masked( GPIO_DBUS_BITMASK, *(src+offset) );
-    offset += incr;
+    gpio_put_masked( GPIO_DBUS_BITMASK, *(data_block->src+offset) );
+    offset += data_block->incr;
 
     /*
      * Wait for Z80 clock to rise and fall - that's at the clock low point halfway through T2
@@ -203,7 +204,7 @@ void dma_memory_block( const uint8_t *src,    const uint32_t zx_ram_location,
     while( gpio_get( GPIO_Z80_CLK ) == 1 );   
 
     /* Update local mirror to match the ZX RAM */
-    put_zx_mirror_byte( zx_ram_location+byte_counter, *(src+byte_counter) );
+    put_zx_mirror_byte( data_block->zx_ram_location+byte_counter, *(data_block->src+byte_counter) );
 
     /* Remove write and memory request */
     gpio_put( GPIO_Z80_WR,   1 );
@@ -302,9 +303,9 @@ void init_interrupt_protection( void )
   uint sm_int_unsafe     = pio_claim_unused_sm( pio, true );
   uint offset_int_unsafe = pio_add_program( pio, &int_unsafe_program );
   int_unsafe_program_init( pio, sm_int_unsafe, offset_int_unsafe, GPIO_Z80_INT, GPIO_INT_UNSAFE );
-  pio_sm_set_enabled( pio, sm_int_unsafe, true);
+  pio_sm_set_enabled( pio, sm_int_unsafe, false);
 
-    /*
+  /*
    * Set up the DMA channel which transfers a flag value from the PIO which indicates
    * it's unsafe for a Z80 DMA to proceed due to the risk of the Z80 missing the next
    * interrupt. The value is a 0 if there's no risk, and 1 if there is risk. It arrives
@@ -353,7 +354,7 @@ void init_interrupt_protection( void )
    * is. Or maybe the crystal in the 40 year old Spectrum I'm testing with has wandered
    * a bit. I could reimplement with some sort of dynamic measuring, but I think this
    * is good enough.
-   */
+   */  
   const uint32_t interval_countdown = 3994000-4000;
   dma_channel_configure( int_interval_dma_channel,
                          &int_interval_dma_config,
@@ -362,6 +363,9 @@ void init_interrupt_protection( void )
                          0xF0000001,                   // 1 transfer, plus 0xF0000000, ENDLESS, Spec 12.6.2.2.1
                          true                          // Start immediately
                         );
+
+  /* Start the PIO running */
+  pio_sm_set_enabled( pio, sm_int_unsafe, true);
 
   return;
 }

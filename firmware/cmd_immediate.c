@@ -84,7 +84,8 @@ static void immediate_cmd_memset( MEMSET_CMD *memset_cmd_ptr )
   const uint16_t  n       = memset_cmd_ptr->n[0] + memset_cmd_ptr->n[1]*256;
 
   gpio_put( GPIO_BLIPPER1, 0 );
-  dma_memory_block( src, zx_addr, n, 0, true );
+  DMA_BLOCK block = { (uint8_t*)src, zx_addr, n, 0 };
+  dma_memory_block( &block, false );
 }
 
 /*

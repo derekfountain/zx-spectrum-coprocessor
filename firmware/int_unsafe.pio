@@ -30,12 +30,15 @@
 ; Z80, which at a minimum of 4 T-states for the fastest Z80 instructions
 ; represents about 30 Z80 instructions. It's extremely unlikely this will
 ; ever be hit, but if it is that's a price that's OK to pay, I think.
+;
+; The flag, both in core variable and GPIO guise, is set low (0) when
+; the DMA is safe to take place, and high (1) when it's unsafe.
 
 .program int_unsafe
 
 .wrap_target
 
-  wait 0 pin 0              ; wait for the /INT to go low
+  wait 0 pin 0              ; wait for the /INT to go low, i.e. /INT has passed
 
   pull block                ; fetch the countdown loop value from core DMA
   mov x, osr                ; x is the loop counter
@@ -77,7 +80,7 @@ void int_unsafe_program_init(PIO pio, uint sm, uint offset, uint int_pin, uint t
   pio_gpio_init(pio, int_pin);
   pio_gpio_init(pio, test_pin);
 
-  /* Set input pin to be input */
+  /* Set input pin to be input, test pin to be output */
   pio_sm_set_consecutive_pindirs(pio, sm, int_pin,  1, false);
   pio_sm_set_consecutive_pindirs(pio, sm, test_pin, 1, true);
 
