@@ -64,7 +64,7 @@ static void test_blipper( void )
  */
 static int64_t load_test_program( alarm_id_t id, void *user_data )
 {
-  //z80_test_image_set_pending();
+  z80_test_image_set_pending();
 
   return 0;
 }
@@ -123,10 +123,10 @@ void main( void )
 
   /* Initialise the interrupt protection PIO and DMA system */
   init_dma_engine();
-  init_interrupt_protection();
 
   /* Zero mirror memory */
   initialise_zx_mirror();
+  init_interrupt_protection();
 
   /* Take over the ZX ROM */
   if( using_rom_emulation() )
@@ -139,19 +139,20 @@ void main( void )
   {
     /* Not emulating ROM, let the Spectrum's ROM chip do its normal thing */
     gpio_init( GPIO_ROMCS ); gpio_set_dir( GPIO_ROMCS, GPIO_IN );
-    //start_rom_emulation( RAM_MIRROR_ONLY );
+    start_rom_emulation( RAM_MIRROR_ONLY );
   }
 
   /* Give the other core a moment to initialise */
-  //sleep_ms( 100 );
+  sleep_ms( 100 );
 
   if( using_z80_test_image() )
   {
     init_z80_test_image();
 
     /* The DMA stuff starts in a few seconds */
-    //add_alarm_in_ms( 3000, load_test_program, NULL, 0 );
+    add_alarm_in_ms( 3000, load_test_program, NULL, 0 );
   }
+
 
   /* Let the Spectrum run */
   gpio_put( GPIO_RESET_Z80, 0 );

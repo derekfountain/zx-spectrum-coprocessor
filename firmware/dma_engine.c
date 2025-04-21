@@ -355,7 +355,7 @@ void init_interrupt_protection( void )
    * a bit. I could reimplement with some sort of dynamic measuring, but I think this
    * is good enough.
    */  
-  const uint32_t interval_countdown = 3994000-4000;
+  static const uint32_t interval_countdown = 3994000-4000;
   dma_channel_configure( int_interval_dma_channel,
                          &int_interval_dma_config,
                          &pio0_hw->txf[0],             // Write address, PIO's FIFO
