@@ -21,6 +21,7 @@
 #define __CMD_H
 
 #include <stdint.h>
+#include "zx_copro.h"
 
 /*
  * These are the commands the coprocessor is able to fulfill.
@@ -39,7 +40,8 @@ ZXCOPRO_CMD;
  */
 typedef enum
 {
-  ZXCOPRO_OK = 1,             /* Assume the Z80 starts with it as 0, so non-zero starting point here */
+  ZXCOPRO_NONE = 0,
+  ZXCOPRO_OK = 1,
   ZXCOPRO_CMD_ERROR,
 }
 ZXCOPRO_RESPONSE;
@@ -52,13 +54,18 @@ typedef enum
   ZXCOPRO_CMD_ERR_BAD_STRUCT = 1,
   ZXCOPRO_CMD_ERR_UNKNOWN_CMD,
 
+  ZXCOPRO_CMD_ERR_BAD_ARG,
+
   ZXCOPRO_CMD_ERR_LAST
 }
 ZXCOPRO_ERROR;
 
 /*
- * This structure defines a coprocessor request. It starts on the Spectrum
- * from where the coprocessor reads its contents.
+ * This structure defines a coprocessor request. It's created on the Spectrum
+ * from where the coprocessor reads its contents (e.g. type) and writes back the
+ * response and error codes as appropriate.
+ * The bytes in the Spectrum memory which immediately follow this structure are
+ * the arguments to the command, and are defined by 'type'.
  */
 typedef struct _cmd_struct
 {

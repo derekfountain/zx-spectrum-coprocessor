@@ -116,7 +116,11 @@ void dma_memory_block( const DMA_BLOCK *data_block,
      * A combination of the int_unsafe PIO program and
      * RP2350 DMA keep this global variable updated
      */
-    while( interrupt_unsafe );
+    while( interrupt_unsafe )
+    {
+      gpio_put( GPIO_BLIPPER2, 1 );
+      gpio_put( GPIO_BLIPPER2, 0 );
+    };
   }
 
   /*
@@ -284,6 +288,9 @@ void dma_memory_block( const DMA_BLOCK *data_block,
 
   /* Release bus request */
   gpio_put( GPIO_Z80_BUSREQ, 1 );
+
+  /* Wait for ack to go inactive again */
+  while( gpio_get( GPIO_Z80_BUSACK ) == 0 );
 
   /* Indicate DMA process complete, inactive */
   gpio_put( GPIO_BLIPPER1, 1 );

@@ -60,7 +60,7 @@ void cache_immediate_cmd_address_hi( uint8_t data )
  * Pick up the address in Spectrum memory of the command structure which
  * defines the coprocessor command to run.
  */
-static uint16_t query_immediate_cmd_address( void )
+static ZX_ADDR query_immediate_cmd_address( void )
 {
   return (cmd_address_hi << 8) + cmd_address_lo;
 }
@@ -76,16 +76,33 @@ inline uint32_t is_immediate_cmd_pending( void )
 }
 
 
-
-static void immediate_cmd_memset( MEMSET_CMD *memset_cmd_ptr )
+static void immediate_cmd_memset( ZX_ADDR cmd_zx_addr, ZX_ADDR response_zx_addr )
 {
-  const uint8_t  *src    = &(memset_cmd_ptr->c);
-  const uint16_t  zx_addr = memset_cmd_ptr->zx_addr[0] + memset_cmd_ptr->zx_addr[1]*256;
-  const uint16_t  n       = memset_cmd_ptr->n[0] + memset_cmd_ptr->n[1]*256;
+  /*
+   * Pick up the address in RP memory of the command structure. This returns a
+   * pointer into RP memory.
+   */
+  const CMD_STRUCT *cmd_ptr = query_zx_mirror_ptr( cmd_zx_addr );
 
-  gpio_put( GPIO_BLIPPER1, 0 );
+  /* The memset command structure immediately follows the command structure */
+  MEMSET_CMD *memset_cmd_ptr = (MEMSET_CMD*)((uint8_t*)cmd_ptr + sizeof( CMD_STRUCT ));
+
+  /* memset_cmd_ptr is pointing into RP memory which contains the mirror of the Spectrum's RAM */
+  const ZX_BYTE  *src    = &(memset_cmd_ptr->c);
+  const ZX_ADDR   zx_addr = memset_cmd_ptr->zx_addr[0] + memset_cmd_ptr->zx_addr[1]*256;
+  const ZX_WORD   n       = memset_cmd_ptr->n[0] + memset_cmd_ptr->n[1]*256;
+
   DMA_BLOCK block = { (uint8_t*)src, zx_addr, n, 0 };
-  dma_memory_block( &block, false );
+  dma_memory_block( &block, true );
+
+  /*
+   * FIXME This needs to be chained from the previous block, but
+   * it would only save about 1us, maybe a little less, so it can
+   * go on the TODO list for now
+   */
+  ZXCOPRO_RESPONSE response_ok = ZXCOPRO_OK;
+  DMA_BLOCK response = { (uint8_t*)&response_ok, response_zx_addr, 1, 0 };
+  dma_memory_block( &response, true );
 }
 
 /*
@@ -95,21 +112,27 @@ static void immediate_cmd_memset( MEMSET_CMD *memset_cmd_ptr )
  */
 void service_immediate_cmd( void )
 {
-  /* Find the address previously written by the Z80 into IMMEDIATE_CMD_TRIGGER_REG */
-  uint16_t cmd_zx_addr = query_immediate_cmd_address();
+  /*
+   * Find the address in ZX memory previously written by the Z80 into IMMEDIATE_CMD_TRIGGER_REG.
+   * That's the start of the CMD_STRUCT in the Z80 address space. The response to the ZX from
+   * the copro goes back in a member of that structure.
+   */
+  const ZX_ADDR cmd_zx_addr      = query_immediate_cmd_address();
+  const ZX_ADDR response_zx_addr = cmd_zx_addr + offsetof( CMD_STRUCT, response );
 
   /*
-   * Pick up the address in the ZX memory of the command structure. This returns a
-   * pointer into RP memory which contains the ZX memory image.
+   * Pick up the address in RP memory of the command structure and fetch the
+   * command type from it
    */
   const CMD_STRUCT *cmd_ptr = query_zx_mirror_ptr( cmd_zx_addr );
+  const ZXCOPRO_CMD cmd_type = cmd_ptr->type;
 
   /* OK, whatever the Z80 program has requested, that's what we want to do */
-  switch( cmd_ptr->type )
+  switch( cmd_type )
   {
     case ZXCOPRO_MEMSET_SMALL:
     {
-      immediate_cmd_memset( (MEMSET_CMD*)((uint8_t*)cmd_ptr + sizeof( CMD_STRUCT )) );
+      immediate_cmd_memset( cmd_zx_addr, response_zx_addr );
     }
     break;
 

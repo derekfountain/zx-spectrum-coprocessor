@@ -29,19 +29,19 @@
  */
 static uint8_t zx_memory_mirror[ZX_MEMORY_SIZE];
 
-inline uint8_t get_zx_mirror_byte( uint32_t offset )
+inline uint8_t get_zx_mirror_byte( ZX_ADDR offset )
 {
   return zx_memory_mirror[offset];
 }
 
-inline void put_zx_mirror_byte( uint32_t offset, uint8_t value )
+inline void put_zx_mirror_byte( const ZX_ADDR offset, const ZX_BYTE value )
 {
   zx_memory_mirror[offset] = value;
 }
 
-const void *query_zx_mirror_ptr( uint16_t offset )
+const void *query_zx_mirror_ptr( const ZX_ADDR addr )
 {
-  return &zx_memory_mirror[offset];
+  return &zx_memory_mirror[addr];
 }
 
 void initialise_zx_mirror( void )

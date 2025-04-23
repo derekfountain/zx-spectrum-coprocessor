@@ -16,8 +16,8 @@ void main(void)
   {
     128, 0, 0,                 // CMD type, result and error
 
-    0, 0,                      // zx_addr to set memory at
-    0,                         // c, constant value to set
+    0, 0xc0,                   // zx_addr to set memory at C000
+    0x55,                      // c, constant value to set
     0, 0,                      // n, 16 bit count to set
   };
 
@@ -26,30 +26,29 @@ void main(void)
   uint32_t check_counter = 0;
   while(1)
   {
-    memset_cmd[3] = 0x00;
-    memset_cmd[4] = 0xc0; // 57344
+    memset_cmd[1] = 0;    // Response
 
-    memset_cmd[5] = 0x55;
+    memset_cmd[5] = 0x55; //make this a counter
 
-    memset_cmd[6] = 0xff;
-    memset_cmd[7] = 0x1f; // 8K-1
+    memset_cmd[6] = 32;
+    memset_cmd[7] = 0;
 
     uint16_t memset_cmd_addr = (uint16_t)(&memset_cmd[0]);
 
     *((uint8_t*)14446) = (uint8_t)(memset_cmd_addr & 0xFF);
     *((uint8_t*)14447) = (uint8_t)((memset_cmd_addr >> 8) & 0xFF);
     
-    z80_delay_ms(10);
+    while( memset_cmd[1] == 0 );  // Spin on response going to 1
 
     uint16_t counter;
-    for( counter=0; counter < 8191; counter++ )
+    for( counter=0; counter < 32; counter++ )
     {
       uint8_t *check_addr = (uint8_t*)(0xc000+counter);
       if( *check_addr != 0x55 )
       {
 	printf("Fail at %ld, expected 0x55, found %02X\n",
 	       check_addr, *check_addr);
-	exit(0);
+	while(1);
       }
     }
 

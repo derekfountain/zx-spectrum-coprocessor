@@ -17,32 +17,17 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef __DMA_ENGINE_H
-#define __DMA_ENGINE_H
+#ifndef __ZX_COPRO_H
+#define __ZX_COPRO_H
 
 #include <stdint.h>
 
 /*
- * This data structure defines a DMA block to write to the Spectrum.
+ * An address in the Z80's memory space is 0x0000 to 0xFFFF inclusive.
  */
-typedef struct _dma_block
-{
-  uint8_t  *src;               // Location in RP memory to read from
-  uint32_t  zx_ram_location;   // Location in ZX memory to write into
-  uint32_t  length;            // Number of bytes to write
-  uint32_t  incr;              // Number of bytes to increment src by
+typedef uint16_t ZX_ADDR;
 
-  struct _dma_block* next_ptr; // Pointer to next one of these
-} DMA_BLOCK;
-
-void init_dma_engine( void );
-void init_interrupt_protection( void );
-
-void add_dma_to_queue( uint8_t *src, uint32_t zx_ram_location, uint32_t length );
-uint32_t is_dma_queue_full( void );
-void activate_dma_queue_entry( void );
-
-void dma_memory_block( const DMA_BLOCK *data_block,
-                       const uint32_t int_protection );
+typedef uint8_t  ZX_BYTE;
+typedef uint16_t ZX_WORD;
 
 #endif

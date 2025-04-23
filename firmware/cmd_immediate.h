@@ -22,6 +22,7 @@
 
 #include <stdint.h>
 #include "cmd.h"
+#include "gpios.h"
 
 /* This is an unused location in the ROM, unlikely to be written to accidently */
 #define IMMEDIATE_CMD_TRIGGER_REG     ((uint64_t)0x386E)
