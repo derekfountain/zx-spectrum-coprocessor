@@ -21,6 +21,7 @@
 #define __DMA_ENGINE_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 /*
  * This data structure defines a DMA block to write to the Spectrum.
@@ -43,6 +44,6 @@ uint32_t is_dma_queue_full( void );
 void activate_dma_queue_entry( void );
 
 void dma_memory_block( const DMA_BLOCK *data_block,
-                       const uint32_t int_protection );
+                       const bool int_protection );
 
 #endif

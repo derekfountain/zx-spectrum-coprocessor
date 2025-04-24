@@ -1,4 +1,3 @@
-
 /*
  * ZX Coprocessor Firmware, a Raspberry Pi RP2350b based Spectrum device
  * Copyright (C) 2025 Derek Fountain
@@ -92,17 +91,12 @@ static void immediate_cmd_memset( ZX_ADDR cmd_zx_addr, ZX_ADDR response_zx_addr 
   const ZX_ADDR   zx_addr = memset_cmd_ptr->zx_addr[0] + memset_cmd_ptr->zx_addr[1]*256;
   const ZX_WORD   n       = memset_cmd_ptr->n[0] + memset_cmd_ptr->n[1]*256;
 
+  /* DMA the values to set, no increment on the block src pointer */
   DMA_BLOCK block = { (uint8_t*)src, zx_addr, n, 0 };
   dma_memory_block( &block, true );
 
-  /*
-   * FIXME This needs to be chained from the previous block, but
-   * it would only save about 1us, maybe a little less, so it can
-   * go on the TODO list for now
-   */
-  ZXCOPRO_RESPONSE response_ok = ZXCOPRO_OK;
-  DMA_BLOCK response = { (uint8_t*)&response_ok, response_zx_addr, 1, 0 };
-  dma_memory_block( &response, true );
+  /* DMA the response into the ZX memory */
+  dma_response_to_zx( ZXCOPRO_OK, response_zx_addr );
 }
 
 /*

@@ -21,6 +21,7 @@
 #define __CMD_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "zx_copro.h"
 
 /*
@@ -74,5 +75,7 @@ typedef struct _cmd_struct
   ZXCOPRO_ERROR    error; 
 }
 CMD_STRUCT;
+
+void dma_response_to_zx( ZXCOPRO_RESPONSE response, ZX_ADDR response_zx_addr );
 
 #endif

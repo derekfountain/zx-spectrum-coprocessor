@@ -104,7 +104,7 @@ static volatile uint32_t interrupt_unsafe = 0;
  */
 
 void dma_memory_block( const DMA_BLOCK *data_block,
-                       const uint32_t int_protection ) 
+                       const bool int_protection ) 
 {
   /*
    * The Spectrum can't afford to miss an interrupt, so if one is approaching, spin
