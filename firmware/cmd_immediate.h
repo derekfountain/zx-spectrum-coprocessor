@@ -48,7 +48,7 @@ void     cache_immediate_cmd_address_hi( uint8_t data );
 typedef struct _memset_cmd
 {
   uint8_t zx_addr[2];   /* Z80 16 bit, low endian address in ZX memory */
-  uint8_t  c;           /* The constant to set */
+  uint8_t c;            /* The constant to set */
   uint8_t n[2];         /* Z80 16 bit, low endian count of bytes to set */
 } MEMSET_CMD;
 

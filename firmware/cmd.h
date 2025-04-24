@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "zx_copro.h"
+#include "dma_engine.h"
 
 /*
  * These are the commands the coprocessor is able to fulfill.
@@ -34,32 +35,22 @@ typedef enum
 }
 ZXCOPRO_CMD;
 
-/*
- * Valid responses from the coprocessor back into the Spectrum's memory.
- * These are for the high level command structure. Individual commands
- * will have error values of their own.
- */
-typedef enum
-{
-  ZXCOPRO_NONE = 0,
-  ZXCOPRO_OK = 1,
-  ZXCOPRO_CMD_ERROR,
-}
-ZXCOPRO_RESPONSE;
 
 /*
  * Error codes for the command structure.
  */
 typedef enum
 {
-  ZXCOPRO_CMD_ERR_BAD_STRUCT = 1,
-  ZXCOPRO_CMD_ERR_UNKNOWN_CMD,
+  CMD_ERR_BAD_STRUCT = DMA_RESULT_LAST,
+  CMD_ERR_UNKNOWN_CMD,
 
-  ZXCOPRO_CMD_ERR_BAD_ARG,
+  CMD_ERR_BAD_ARG,         // Arguments make no sense
+  CMD_ERR_TOO_BIG,         // Number of bytes to DMA is too large
+  CMD_ERR_BAD_INCR,        // An increment value is way out
 
-  ZXCOPRO_CMD_ERR_LAST
+  CMD_ERR_LAST
 }
-ZXCOPRO_ERROR;
+CMD_ERROR;
 
 /*
  * This structure defines a coprocessor request. It's created on the Spectrum
@@ -72,10 +63,11 @@ typedef struct _cmd_struct
 {
   ZXCOPRO_CMD      type;
   ZXCOPRO_RESPONSE response;
-  ZXCOPRO_ERROR    error; 
+  CMD_ERROR        error; 
 }
 CMD_STRUCT;
 
-void dma_response_to_zx( ZXCOPRO_RESPONSE response, ZX_ADDR response_zx_addr );
+void dma_response_to_zx( ZXCOPRO_RESPONSE response, ZX_ADDR response_zx_addr, ZX_ADDR error_zx_addr );
+void dma_error_to_zx( ZXCOPRO_RESPONSE response, ZX_ADDR error_zx_addr );
 
 #endif

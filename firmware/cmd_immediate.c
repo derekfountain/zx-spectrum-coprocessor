@@ -74,8 +74,36 @@ inline uint32_t is_immediate_cmd_pending( void )
   return cmd_pending;
 }
 
+/*
+ * If the result of the DMA back to the Spectrum was an error, translate that
+ * DMA level error to one of the general ZX-coprocessor results. i.e. convert
+ * from internal value to a value the Spectrum expects to receive.
+ * 
+ * @TODO Not sure about error handling yet, this masks what's
+ * happened from the Z80 program which is not desirable. I think a separate
+ * error handling module of some sort is required.
+ */
+static ZXCOPRO_RESPONSE dma_result_to_response( DMA_RESULT result )
+{
+  struct
+  {
+    DMA_RESULT result;
+    ZXCOPRO_RESPONSE response;
+  } lookup_table[] =
+  {
+    { DMA_RESULT_OK, ZXCOPRO_OK },
+  };
 
-static void immediate_cmd_memset( ZX_ADDR cmd_zx_addr, ZX_ADDR response_zx_addr )
+  for( uint32_t i=0; i<sizeof(lookup_table)/sizeof(lookup_table[0]); i++ )
+  {
+    if( lookup_table[i].result == result )
+      return lookup_table[i].response;
+  }
+
+  return ZXCOPRO_UNKNOWN_ERR;
+}
+
+static void immediate_cmd_memset( ZX_ADDR cmd_zx_addr, ZX_ADDR response_zx_addr, ZX_ADDR error_zx_addr )
 {
   /*
    * Pick up the address in RP memory of the command structure. This returns a
@@ -93,10 +121,17 @@ static void immediate_cmd_memset( ZX_ADDR cmd_zx_addr, ZX_ADDR response_zx_addr 
 
   /* DMA the values to set, no increment on the block src pointer */
   DMA_BLOCK block = { (uint8_t*)src, zx_addr, n, 0 };
-  dma_memory_block( &block, true );
-
-  /* DMA the response into the ZX memory */
-  dma_response_to_zx( ZXCOPRO_OK, response_zx_addr );
+  DMA_RESULT result;
+  if( (result=dma_memory_block( &block, true )) == DMA_RESULT_OK )
+  {
+    /* DMA the response into the ZX memory */
+    dma_response_to_zx( ZXCOPRO_OK, response_zx_addr, error_zx_addr );
+  }
+  else
+  {
+    /* DMA the error into the ZX memory */
+    dma_error_to_zx( dma_result_to_response(result), error_zx_addr );
+  }
 }
 
 /*
@@ -109,10 +144,11 @@ void service_immediate_cmd( void )
   /*
    * Find the address in ZX memory previously written by the Z80 into IMMEDIATE_CMD_TRIGGER_REG.
    * That's the start of the CMD_STRUCT in the Z80 address space. The response to the ZX from
-   * the copro goes back in a member of that structure.
+   * the copro goes back in a member of that structure, or maybe an error.
    */
   const ZX_ADDR cmd_zx_addr      = query_immediate_cmd_address();
   const ZX_ADDR response_zx_addr = cmd_zx_addr + offsetof( CMD_STRUCT, response );
+  const ZX_ADDR error_zx_addr    = cmd_zx_addr + offsetof( CMD_STRUCT, error );
 
   /*
    * Pick up the address in RP memory of the command structure and fetch the
@@ -126,13 +162,16 @@ void service_immediate_cmd( void )
   {
     case ZXCOPRO_MEMSET_SMALL:
     {
-      immediate_cmd_memset( cmd_zx_addr, response_zx_addr );
+      immediate_cmd_memset( cmd_zx_addr, response_zx_addr, error_zx_addr );
     }
     break;
 
     default:
-      // Need to the set the CMD's error to unknown
-      break;
+    {
+      /* @FIXME Error handling is totally wrong, not sure what value this sends! */
+      dma_error_to_zx( CMD_ERR_UNKNOWN_CMD, error_zx_addr );
+    }
+    break;
   }
 
   cmd_pending = 0; 

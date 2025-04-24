@@ -23,10 +23,35 @@
 #include "cmd.h"
 #include "dma_engine.h"
 
-void dma_response_to_zx( ZXCOPRO_RESPONSE response, ZX_ADDR response_zx_addr )
+/*
+ * Return a response to the Spectrum in the original DMA command structure. The
+ * Z80 is expecting to be watching for this. 
+ * 
+ * If this DMA fails then an error code is DMAed back instead, for whatever good
+ * that might do.
+ */
+void dma_response_to_zx( ZXCOPRO_RESPONSE response, ZX_ADDR response_zx_addr, ZX_ADDR error_zx_addr )
 {
   DMA_BLOCK block = { (uint8_t*)&response, response_zx_addr, 1, 0 };
-  dma_memory_block( &block, true );
+  if( dma_memory_block( &block, true ) != DMA_RESULT_OK )
+  {
+    dma_error_to_zx( ZXCOPRO_UNABLE_TO_RETURN_RESPONSE, error_zx_addr );
+  }
 
   return;
 }
+
+/*
+ * Return an error to the Spectrum in the original DMA command structure. The
+ * Z80 program is expected to be watching for this, if it cares.
+ * 
+ * This is the end of the line. If this DMA fails there's nothing more I can do.
+ */
+void dma_error_to_zx( ZXCOPRO_RESPONSE error_code, ZX_ADDR error_zx_addr )
+{
+  DMA_BLOCK block = { (uint8_t*)&error_code, error_zx_addr, 1, 0 };
+  (void)dma_memory_block( &block, true );
+
+  return;
+}
+

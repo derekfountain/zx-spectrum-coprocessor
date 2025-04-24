@@ -20,6 +20,7 @@
 #include "hardware/gpio.h"
 #include "hardware/timer.h"
 
+#include "zx_copro.h"
 #include "dma_engine.h"
 
 #include "gpios.h"
@@ -34,14 +35,14 @@
 typedef struct _DMA_QUEUE_ENTRY
 {
   uint8_t  *src;
-  uint32_t  zx_ram_location;
+  ZX_ADDR   zx_ram_location;
   uint32_t  length;
 }
 DMA_QUEUE_ENTRY;
 
 /* Not sure if this queue idea is going anywhere yet */
 static DMA_QUEUE_ENTRY dma_queue[1] = {0};
-void add_dma_to_queue( uint8_t *src, uint32_t zx_ram_location, uint32_t length )
+void add_dma_to_queue( uint8_t *src, ZX_ADDR zx_ram_location, uint32_t length )
 {
   dma_queue[0].src             = src;
   dma_queue[0].zx_ram_location = zx_ram_location;
@@ -103,9 +104,49 @@ static volatile uint32_t interrupt_unsafe = 0;
  * otherwise in sensible memory locations.
  */
 
-void dma_memory_block( const DMA_BLOCK *data_block,
-                       const bool int_protection ) 
+DMA_RESULT dma_memory_block( const DMA_BLOCK *data_block,
+                             const bool int_protection ) 
 {
+  if( data_block == NULL || data_block->src == NULL )
+    return DMA_RESULT_BAD_STRUCT;
+
+  if( data_block->length == 0 )
+    return DMA_RESULT_TOO_SMALL;
+
+  if( data_block->length > MAX_DMA_LENGTH )
+    return DMA_RESULT_TOO_BIG;
+
+  if( data_block->incr > MAX_INCR )
+    return DMA_RESULT_BAD_INCR;
+
+  /*
+   * Contended location means the DMA needs to work with the Z80 clock timings.
+   * When the ULA stops the Z80's clock, the DMA process needs to stop as well
+   */
+  bool contended = false;
+
+  /*
+   * If the start or end is in the contended memory, it's contended. I choose to check the
+   * end as well on the basis that it's possible to do a large transfer across the ROM space.
+   * i.e. start in upper RAM or ROM, end in screen memory, is technically possible
+   */ 
+  if( (data_block->zx_ram_location >= 0x4000 && data_block->zx_ram_location <= 0x7FFF)
+      ||
+      (data_block->zx_ram_location+data_block->length >= 0x4000 && data_block->zx_ram_location+data_block->length <= 0x7FFF) )
+  {
+    /* Contended memory, but if it's confirmed as running in top border time that's OK as long as it's small */
+    if( data_block->top_border_time == true )
+    {
+      if( data_block->length > TOP_BORDER_MAX_LENGTH )
+        return DMA_RESULT_TOP_BORDER_TOO_BIG;
+    }
+    else
+    {
+      /* If contended location, and we're not running the transfer in top border time, Z80 write timings are essential */
+      contended = true;
+    }
+  }
+
   /*
    * The Spectrum can't afford to miss an interrupt, so if one is approaching, spin
    * while it passes
@@ -214,7 +255,6 @@ void dma_memory_block( const DMA_BLOCK *data_block,
     gpio_put( GPIO_Z80_WR,   1 );
     gpio_put( GPIO_Z80_MREQ, 1 ); 
 
-
     /* Wait for the next rising edge of the clock - that's the end of T3 / start of T1 */
     while( gpio_get( GPIO_Z80_CLK ) == 0 );    
   gpio_put( GPIO_BLIPPER1, 0 );
@@ -295,7 +335,7 @@ void dma_memory_block( const DMA_BLOCK *data_block,
   /* Indicate DMA process complete, inactive */
   gpio_put( GPIO_BLIPPER1, 1 );
 
-  return;
+  return DMA_RESULT_OK;
 }
 
 void init_interrupt_protection( void )
