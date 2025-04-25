@@ -137,13 +137,34 @@ DMA_RESULT dma_memory_block( const DMA_BLOCK *data_block,
     /* Contended memory, but if it's confirmed as running in top border time that's OK as long as it's small */
     if( data_block->top_border_time == true )
     {
+      /*
+       * In top border time, bail out if it's too big. (The transfer would take too long and
+       * the screen will glitch.)
+       */
       if( data_block->length > TOP_BORDER_MAX_LENGTH )
+      {
         return DMA_RESULT_TOP_BORDER_TOO_BIG;
+      }
+      else
+      {
+        /*
+         * DMA into contended memory, but it's only small and we've been told it's
+         * happening in top border time, so no contention will happen. NOP
+         */
+      }
     }
     else
     {
       /* If contended location, and we're not running the transfer in top border time, Z80 write timings are essential */
       contended = true;
+
+      /*
+       * In practise, although I think it should be possible to do a DMA into contended memory
+       * outside top border time, as long as the Z80 clock is respected, it appears not to be.
+       * My memset test fails absolutely consistently. I don't know why. This could stand
+       * further investigation, it'd be nice to make it work.
+       */
+      return DMA_RESULT_CONTENTION_FAIL;
     }
   }
 

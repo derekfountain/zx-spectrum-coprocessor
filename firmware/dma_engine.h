@@ -36,6 +36,7 @@ typedef enum
   DMA_RESULT_TOO_SMALL,                  // Number of bytes to DMA is too small (zero)
   DMA_RESULT_TOP_BORDER_TOO_BIG,         // Number of bytes to DMA in top border time is too large
   DMA_RESULT_BAD_INCR,                   // An increment value is way out
+  DMA_RESULT_CONTENTION_FAIL,            // DMA would clash with ULA's contention
 
   DMA_RESULT_LAST
 }
