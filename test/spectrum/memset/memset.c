@@ -9,9 +9,12 @@
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <z80.h>
+#include <intrinsic.h>
 
 void main(void)
 {
+  intrinsic_di();
+
   /* Compiler gives internal error if this isn't static */
   static uint8_t memset_cmd[] =
   {
@@ -31,7 +34,7 @@ void main(void)
   {
     uint8_t  length = (rand() & 0x1F)+1;
 
-//    uint16_t dest_addr = 0x5B00;            // Lower RAM, contended, printer buffer
+//  uint16_t dest_addr = 0x5BC0;            // Lower RAM, contended, printer buffer, doesn't work
     uint16_t dest_addr = 0xC000;            // Upper RAM, not contended, above code, below stack
 
     memset_cmd[1] = 0;    // Response

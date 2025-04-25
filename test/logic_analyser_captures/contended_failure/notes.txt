@@ -1,0 +1,31 @@
+This is a capture of a failed memset test, which was trying to
+set contended memory. The test would have been loaded into ZX RAM
+(first DMA transfer), then the test transfer happened - byte 00x25
+(that's the second DMA transfer). That worked, or at least didn't
+fail. Third transfer was the '1' response for that DMA, which arrived
+correctly.
+
+The next transfer was 01x10, followed by the '1' response. The LA was
+triggered on the 01x10. That happened at the dotted line on the LA
+screenie. The 01x10 happens correctly, but it doesn't arrive. The ZX
+test case complains the memory contains 00, not 01.
+
+The DMA transfer looks right to me. This was with Z80 timings in the
+DMA code, so following the Z80's clock. In theory I think it should
+have worked.
+
+In practise this test fails very consistently. Not second DMA transfer
+every time, but always within the first dozen or so. It works when 
+pointed at a high memory DMA destination.
+
+My placing the lower RAM address on the address bus will trigger
+contention in the ULA. It doesn't care why that pattern appears on the
+address bus.
+
+If the ULA has already got the clock stopped I'd expect the Z80 to
+not respond to BUSREQ with BUSACK. BUSREQ is sampled with the clock
+pulses.
+
+Bottom line is I don't know why the DMA fails, but it does, and the
+RP doesn't notice. So as things stand I can only work on the basis
+that this has to remain a restriction.
