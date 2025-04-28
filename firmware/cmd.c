@@ -33,7 +33,7 @@
 void dma_response_to_zx( ZXCOPRO_RESPONSE response, ZX_ADDR response_zx_addr, ZX_ADDR error_zx_addr )
 {
   DMA_BLOCK block = { (uint8_t*)&response, response_zx_addr, 1, 0 };
-  if( dma_memory_block( &block, true ) != DMA_RESULT_OK )
+  if( dma_memory_block( &block, true ) != DMA_STATUS_OK )
   {
     dma_error_to_zx( ZXCOPRO_UNABLE_TO_RETURN_RESPONSE, error_zx_addr );
   }

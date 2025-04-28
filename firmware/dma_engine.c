@@ -104,20 +104,20 @@ static volatile uint32_t interrupt_unsafe = 0;
  * otherwise in sensible memory locations.
  */
 
-DMA_RESULT dma_memory_block( const DMA_BLOCK *data_block,
+DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
                              const bool int_protection ) 
 {
   if( data_block == NULL || data_block->src == NULL )
-    return DMA_RESULT_BAD_STRUCT;
+    return DMA_STATUS_BAD_STRUCT;
 
   if( data_block->length == 0 )
-    return DMA_RESULT_TOO_SMALL;
+    return DMA_STATUS_TOO_SMALL;
 
   if( data_block->length > MAX_DMA_LENGTH )
-    return DMA_RESULT_TOO_BIG;
+    return DMA_STATUS_TOO_BIG;
 
   if( data_block->incr > MAX_INCR )
-    return DMA_RESULT_BAD_INCR;
+    return DMA_STATUS_BAD_INCR;
 
   /*
    * Contended location means the DMA needs to work with the Z80 clock timings.
@@ -143,7 +143,7 @@ DMA_RESULT dma_memory_block( const DMA_BLOCK *data_block,
        */
       if( data_block->length > TOP_BORDER_MAX_LENGTH )
       {
-        return DMA_RESULT_TOP_BORDER_TOO_BIG;
+        return DMA_STATUS_TOP_BORDER_TOO_BIG;
       }
       else
       {
@@ -164,7 +164,7 @@ DMA_RESULT dma_memory_block( const DMA_BLOCK *data_block,
        * My memset test fails absolutely consistently. I don't know why. This could stand
        * further investigation, it'd be nice to make it work.
        */
-      return DMA_RESULT_CONTENTION_FAIL;
+      return DMA_STATUS_CONTENTION_FAIL;
     }
   }
 
@@ -214,7 +214,7 @@ DMA_RESULT dma_memory_block( const DMA_BLOCK *data_block,
   gpio_set_dir( GPIO_Z80_WR,   GPIO_OUT ); gpio_put( GPIO_Z80_WR,   1 );
 
   /* Blipper goes low while DMA process is active */
-  gpio_put( GPIO_BLIPPER1, 0 );
+//  gpio_put( GPIO_BLIPPER1, 0 );
 
   /* Wait for rising edge of clock, syncs to start of T1 (Z80 manual fig 6, right side) */
   while( gpio_get( GPIO_Z80_CLK ) == 0 );  
@@ -235,8 +235,6 @@ DMA_RESULT dma_memory_block( const DMA_BLOCK *data_block,
   uint32_t offset = 0;
   for( uint32_t byte_counter=0; byte_counter < data_block->length; byte_counter++ )
   {
-  gpio_put( GPIO_BLIPPER1, 1 );
-
     /* Set address of ZX byte to write to */
     gpio_put_masked( GPIO_ABUS_BITMASK, (data_block->zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
 
@@ -278,7 +276,6 @@ DMA_RESULT dma_memory_block( const DMA_BLOCK *data_block,
 
     /* Wait for the next rising edge of the clock - that's the end of T3 / start of T1 */
     while( gpio_get( GPIO_Z80_CLK ) == 0 );    
-  gpio_put( GPIO_BLIPPER1, 0 );
   }
 #else
   /*
@@ -354,9 +351,9 @@ DMA_RESULT dma_memory_block( const DMA_BLOCK *data_block,
   while( gpio_get( GPIO_Z80_BUSACK ) == 0 );
 
   /* Indicate DMA process complete, inactive */
-  gpio_put( GPIO_BLIPPER1, 1 );
+//  gpio_put( GPIO_BLIPPER1, 1 );
 
-  return DMA_RESULT_OK;
+  return DMA_STATUS_OK;
 }
 
 void init_interrupt_protection( void )

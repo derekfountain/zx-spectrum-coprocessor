@@ -29,18 +29,18 @@
  */
 typedef enum
 {
-  DMA_RESULT_OK = 0,
+  DMA_STATUS_OK = 0,
 
-  DMA_RESULT_BAD_STRUCT,
-  DMA_RESULT_TOO_BIG,                    // Number of bytes to DMA is too large
-  DMA_RESULT_TOO_SMALL,                  // Number of bytes to DMA is too small (zero)
-  DMA_RESULT_TOP_BORDER_TOO_BIG,         // Number of bytes to DMA in top border time is too large
-  DMA_RESULT_BAD_INCR,                   // An increment value is way out
-  DMA_RESULT_CONTENTION_FAIL,            // DMA would clash with ULA's contention
+  DMA_STATUS_BAD_STRUCT,
+  DMA_STATUS_TOO_BIG,                    // Number of bytes to DMA is too large
+  DMA_STATUS_TOO_SMALL,                  // Number of bytes to DMA is too small (zero)
+  DMA_STATUS_TOP_BORDER_TOO_BIG,         // Number of bytes to DMA in top border time is too large
+  DMA_STATUS_BAD_INCR,                   // An increment value is way out
+  DMA_STATUS_CONTENTION_FAIL,            // DMA would clash with ULA's contention
 
-  DMA_RESULT_LAST
+  DMA_STATUS_LAST
 }
-DMA_RESULT;
+DMA_STATUS;
 
 /*
  * This data structure defines a DMA block to write to the Spectrum.
@@ -83,7 +83,7 @@ void add_dma_to_queue( uint8_t *src, ZX_ADDR zx_ram_location, uint32_t length );
 uint32_t is_dma_queue_full( void );
 void activate_dma_queue_entry( void );
 
-DMA_RESULT dma_memory_block( const DMA_BLOCK *data_block,
+DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
                              const bool int_protection );
 
 #endif

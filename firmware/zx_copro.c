@@ -157,6 +157,12 @@ void main( void )
   /* Let the Spectrum run */
   gpio_put( GPIO_RESET_Z80, 0 );
 
+  const uint64_t immediate_cmd_trigger_mask       = IMMEDIATE_CMD_TRIGGER_MASK;
+  const uint64_t immediate_cmd_trigger_pattern_hi = IMMEDIATE_CMD_TRIGGER_PATTERN_HI;
+  const uint64_t immediate_cmd_trigger_pattern_lo = IMMEDIATE_CMD_TRIGGER_PATTERN_LO;
+
+  uint8_t cmd_address_lo;
+
   /*
    * The IRQ handler stuff is nowhere near fast enough to handle this. The Z80's
    * write is finished long before the RP2350 even gets to call the handler function.
@@ -164,31 +170,27 @@ void main( void )
    */
   while( 1 )
   {
-    const uint64_t immediate_cmd_trigger_mask       = IMMEDIATE_CMD_TRIGGER_MASK;
-    const uint64_t immediate_cmd_trigger_pattern_hi = IMMEDIATE_CMD_TRIGGER_PATTERN_HI;
-    const uint64_t immediate_cmd_trigger_pattern_lo = IMMEDIATE_CMD_TRIGGER_PATTERN_LO;
-
-    // FIXME PIO would be a lot more efficient than this
+    // @FIXME PIO would be a lot more efficient than this. This is close to the 
+    // limit speed-wise.
     //
     uint64_t gpios;
-    uint8_t  data_bus;
     if( ((gpios=gpio_get_all64()) & immediate_cmd_trigger_mask) == immediate_cmd_trigger_pattern_lo )
     {
-      /* Z80 is writing to the immediate command register low byte */
-      cache_immediate_cmd_address_lo( (gpios>>GPIO_DBUS_D0) & GPIO_DBUS_BITMASK );
+      /* Z80 is writing to the immediate command register low byte, stash value */
+      cmd_address_lo = (gpios>>GPIO_DBUS_D0) & GPIO_DBUS_BITMASK;
     }
     else if( (gpios & immediate_cmd_trigger_mask) == immediate_cmd_trigger_pattern_hi )
     {
       /* Z80 is writing to the immediate command register high byte */
-      cache_immediate_cmd_address_hi( (gpios>>GPIO_DBUS_D0) & GPIO_DBUS_BITMASK );
+      ZX_ADDR cmd_address_hi = (gpios>>GPIO_DBUS_D0) & GPIO_DBUS_BITMASK;
+
+      /*
+       * Assume this is the second half of a 16-bit write and that the
+       * value is now available. The rule is that the low byte has to be
+       * written first.
+       */
+      service_immediate_cmd( (ZX_ADDR)(cmd_address_hi << 8) + cmd_address_lo );
     }
-
-
-    if( is_immediate_cmd_pending() )
-    {
-      service_immediate_cmd();
-    }
-
 
     /*
      * If there's something in the DMA queue, activate it.

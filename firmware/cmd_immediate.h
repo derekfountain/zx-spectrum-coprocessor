@@ -34,10 +34,7 @@
 #define IMMEDIATE_CMD_TRIGGER_PATTERN_LO (IMMEDIATE_CMD_TRIGGER_REG<<GPIO_ABUS_A0)
 #define IMMEDIATE_CMD_TRIGGER_PATTERN_HI ((IMMEDIATE_CMD_TRIGGER_REG+1)<<GPIO_ABUS_A0)
 
-uint32_t is_immediate_cmd_pending( void );
-void     service_immediate_cmd( void );
-void     cache_immediate_cmd_address_lo( uint8_t data );
-void     cache_immediate_cmd_address_hi( uint8_t data );
+void    service_immediate_cmd( ZX_ADDR zx_addr );
 
 /*
  * memset, memory set coprocessor command
@@ -52,5 +49,16 @@ typedef struct _memset_cmd
   uint8_t n[2];         /* Z80 16 bit, low endian count of bytes to set */
 } MEMSET_CMD;
 
+/*
+ * pxy2saddr, pixel x,y to screen address coprocessor command
+ *
+ * As per the same function in z88dk.
+ */
+typedef struct _pxy2saddr_cmd
+{
+  uint8_t x;            /* X pixel, 0 to 255 */
+  uint8_t y;            /* Y pixel, 0 to 191 */
+  ZX_ADDR result;       /* 2 byte place to put the result (16 bit address) */
+} PXY2SADDR_CMD;
 
 #endif

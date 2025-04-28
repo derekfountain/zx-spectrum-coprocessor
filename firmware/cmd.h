@@ -31,6 +31,8 @@
 typedef enum
 {
   ZXCOPRO_MEMSET_SMALL  = 128,
+  ZXCOPRO_PXY2SADDR,
+
   ZXCOPRO_MEMSET_LARGE,          // FIXME Still not sure if commands which run on /int should be separate or flagged
 }
 ZXCOPRO_CMD;
@@ -41,7 +43,7 @@ ZXCOPRO_CMD;
  */
 typedef enum
 {
-  CMD_ERR_BAD_STRUCT = DMA_RESULT_LAST,
+  CMD_ERR_BAD_STRUCT = DMA_STATUS_LAST,
   CMD_ERR_UNKNOWN_CMD,
 
   CMD_ERR_BAD_ARG,         // Arguments make no sense
@@ -62,8 +64,8 @@ CMD_ERROR;
 typedef struct _cmd_struct
 {
   ZXCOPRO_CMD      type;
-  ZXCOPRO_RESPONSE response;
-  CMD_ERROR        error; 
+  ZXCOPRO_RESPONSE response;  // @FIXME This should be "result ready" or somesuch. The error is the response
+  CMD_ERROR        error;     // As it is the Z80 has to spin on both these values, which is daft
 }
 CMD_STRUCT;
 
