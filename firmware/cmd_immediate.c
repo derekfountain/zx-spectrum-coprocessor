@@ -32,12 +32,12 @@
  * happened from the Z80 program which is not desirable. I think a separate
  * error handling module of some sort is required.
  */
-static ZXCOPRO_RESPONSE dma_result_to_response( DMA_STATUS status )
+static ZXCOPRO_STATUS dma_result_to_response( DMA_STATUS dma_status )
 {
   struct
   {
-    DMA_STATUS status;
-    ZXCOPRO_RESPONSE response;
+    DMA_STATUS     dma_status;
+    ZXCOPRO_STATUS zxcopro_status;
   } lookup_table[] =
   {
     { DMA_STATUS_OK, ZXCOPRO_OK },
@@ -45,14 +45,14 @@ static ZXCOPRO_RESPONSE dma_result_to_response( DMA_STATUS status )
 
   for( uint32_t i=0; i<sizeof(lookup_table)/sizeof(lookup_table[0]); i++ )
   {
-    if( lookup_table[i].status == status )
-      return lookup_table[i].response;
+    if( lookup_table[i].dma_status == dma_status )
+      return lookup_table[i].zxcopro_status;
   }
 
-  return ZXCOPRO_UNKNOWN_ERR;
+  return ZXCOPRO_UNKNOWN;
 }
 
-static void immediate_cmd_memset( ZX_ADDR cmd_zx_addr, ZX_ADDR response_zx_addr, ZX_ADDR error_zx_addr )
+static void immediate_cmd_memset( ZX_ADDR cmd_zx_addr, ZX_ADDR status_zx_addr, ZX_ADDR error_zx_addr )
 {
   /*
    * Pick up the address in RP memory of the command structure. This returns a
@@ -73,17 +73,17 @@ static void immediate_cmd_memset( ZX_ADDR cmd_zx_addr, ZX_ADDR response_zx_addr,
   DMA_STATUS status;
   if( (status=dma_memory_block( &block, true )) == DMA_STATUS_OK )
   {
-    /* DMA the response into the ZX memory */
-    dma_response_to_zx( ZXCOPRO_OK, response_zx_addr, error_zx_addr );
+    /* DMA the status into the ZX memory */
+    dma_status_to_zx( ZXCOPRO_OK, status_zx_addr, error_zx_addr );
   }
   else
   {
     /* DMA the error into the ZX memory */
-    dma_error_to_zx( dma_result_to_response(status), error_zx_addr );
+    dma_error_to_zx( dma_result_to_response(status), status_zx_addr, error_zx_addr );
   }
 }
 
-static void immediate_cmd_pxy2saddr( ZX_ADDR cmd_zx_addr, ZX_ADDR response_zx_addr, ZX_ADDR error_zx_addr )
+static void immediate_cmd_pxy2saddr( ZX_ADDR cmd_zx_addr, ZX_ADDR status_zx_addr, ZX_ADDR error_zx_addr )
 {
   ZX_ADDR saddr_lut[] = { 0x4000, 0x4100, 0x4200, 0x4300, 0x4400, 0x4500, 0x4600, 0x4700,
                           0x4020, 0x4120, 0x4220, 0x4320, 0x4420, 0x4520, 0x4620, 0x4720,
@@ -141,18 +141,18 @@ static void immediate_cmd_pxy2saddr( ZX_ADDR cmd_zx_addr, ZX_ADDR response_zx_ad
     DMA_STATUS status;
     if( (status=dma_memory_block( &block, true )) == DMA_STATUS_OK )
     {
-      /* DMA the response into the ZX memory */
-      dma_response_to_zx( ZXCOPRO_OK, response_zx_addr, error_zx_addr );
+      /* DMA the status into the ZX memory */
+      dma_status_to_zx( ZXCOPRO_OK, status_zx_addr, error_zx_addr );
     }
     else
     {
       /* DMA the error into the ZX memory */
-      dma_error_to_zx( dma_result_to_response(status), error_zx_addr );
+      dma_error_to_zx( dma_result_to_response(status), status_zx_addr, error_zx_addr );
     }
   }
   else
   {
-    dma_error_to_zx( CMD_ERR_BAD_ARG, error_zx_addr );
+    dma_error_to_zx( CMD_ERR_BAD_ARG, status_zx_addr, error_zx_addr );
   }
 }
 
@@ -164,17 +164,17 @@ static void immediate_cmd_pxy2saddr( ZX_ADDR cmd_zx_addr, ZX_ADDR response_zx_ad
 void service_immediate_cmd( ZX_ADDR cmd_zx_addr )
 {
   /*
-   * We have the start of the CMD_STRUCT in the Z80 address space. The response to the ZX from
+   * We have the start of the CMD_STRUCT in the Z80 address space. The status to the ZX from
    * the copro goes back in a member of that structure, or maybe an error.
    */
-  const ZX_ADDR response_zx_addr = cmd_zx_addr + offsetof( CMD_STRUCT, response );
-  const ZX_ADDR error_zx_addr    = cmd_zx_addr + offsetof( CMD_STRUCT, error );
+  const ZX_ADDR status_zx_addr = cmd_zx_addr + offsetof( CMD_STRUCT, status );
+  const ZX_ADDR error_zx_addr  = cmd_zx_addr + offsetof( CMD_STRUCT, error );
 
   /*
    * Pick up the address in RP memory of the command structure and fetch the
    * command type from it
    */
-  const CMD_STRUCT *cmd_ptr = query_zx_mirror_ptr( cmd_zx_addr );
+  const CMD_STRUCT *cmd_ptr  = query_zx_mirror_ptr( cmd_zx_addr );
   const ZXCOPRO_CMD cmd_type = cmd_ptr->type;
 
   /*
@@ -185,19 +185,19 @@ void service_immediate_cmd( ZX_ADDR cmd_zx_addr )
   {
     case ZXCOPRO_MEMSET_SMALL:
     {
-      immediate_cmd_memset( cmd_zx_addr, response_zx_addr, error_zx_addr );
+      immediate_cmd_memset( cmd_zx_addr, status_zx_addr, error_zx_addr );
     }
     break;
     case ZXCOPRO_PXY2SADDR:
     {
-      immediate_cmd_pxy2saddr( cmd_zx_addr, response_zx_addr, error_zx_addr );
+      immediate_cmd_pxy2saddr( cmd_zx_addr, status_zx_addr, error_zx_addr );
     }
     break;
 
     default:
     {
       /* @FIXME Error handling is totally wrong, not sure what value this sends! */
-      dma_error_to_zx( CMD_ERR_UNKNOWN_CMD, error_zx_addr );
+      dma_error_to_zx( CMD_ERR_UNKNOWN_CMD, status_zx_addr, error_zx_addr );
     }
     break;
   }

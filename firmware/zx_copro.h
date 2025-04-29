@@ -23,20 +23,20 @@
 #include <stdint.h>
 
 /*
- * Valid responses from the coprocessor back into the Spectrum's memory.
+ * Status status from the coprocessor back into the Spectrum's memory.
  * These are for the highest level structure. Individual processes and commands
- * have error values of their own.
+ * have result values of their own.
  */
 typedef enum
 {
   ZXCOPRO_NONE        = 0,
   ZXCOPRO_OK          = 1,
+  ZXCOPRO_ERROR       = 2,
 
   ZXCOPRO_UNABLE_TO_RETURN_RESPONSE,
-
-  ZXCOPRO_UNKNOWN_ERR
+  ZXCOPRO_UNKNOWN
 }
-ZXCOPRO_RESPONSE;
+ZXCOPRO_STATUS;
 
 /*
  * An address in the Z80's memory space is 0x0000 to 0xFFFF inclusive.

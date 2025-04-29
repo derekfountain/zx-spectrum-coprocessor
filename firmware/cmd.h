@@ -57,19 +57,19 @@ CMD_ERROR;
 /*
  * This structure defines a coprocessor request. It's created on the Spectrum
  * from where the coprocessor reads its contents (e.g. type) and writes back the
- * response and error codes as appropriate.
+ * status and error codes as appropriate.
  * The bytes in the Spectrum memory which immediately follow this structure are
  * the arguments to the command, and are defined by 'type'.
  */
 typedef struct _cmd_struct
 {
-  ZXCOPRO_CMD      type;
-  ZXCOPRO_RESPONSE response;  // @FIXME This should be "result ready" or somesuch. The error is the response
-  CMD_ERROR        error;     // As it is the Z80 has to spin on both these values, which is daft
+  ZXCOPRO_CMD    type;
+  ZXCOPRO_STATUS status;  // @FIXME This should be "result ready" or somesuch. The error is the status
+  CMD_ERROR      error;     // As it is the Z80 has to spin on both these values, which is daft
 }
 CMD_STRUCT;
 
-void dma_response_to_zx( ZXCOPRO_RESPONSE response, ZX_ADDR response_zx_addr, ZX_ADDR error_zx_addr );
-void dma_error_to_zx( ZXCOPRO_RESPONSE response, ZX_ADDR error_zx_addr );
+void dma_status_to_zx( ZXCOPRO_STATUS status, ZX_ADDR status_zx_addr, ZX_ADDR error_zx_addr );
+void dma_error_to_zx( ZXCOPRO_STATUS status, ZX_ADDR status_zx_addr, ZX_ADDR error_zx_addr );
 
 #endif
