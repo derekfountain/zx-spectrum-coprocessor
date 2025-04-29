@@ -63,9 +63,10 @@ CMD_ERROR;
  */
 typedef struct _cmd_struct
 {
-  ZXCOPRO_CMD    type;
-  ZXCOPRO_STATUS status;  // @FIXME This should be "result ready" or somesuch. The error is the status
-  CMD_ERROR      error;     // As it is the Z80 has to spin on both these values, which is daft
+  ZXCOPRO_CMD    type;      // Input to copro, the type of command the Z80 wants
+  ZXCOPRO_STATUS status;    // Output from copro, the final status of the command
+  CMD_ERROR      error;     // Output from copro, if status is ZXCOPRO_ERROR, this
+                            // can contain a further error code
 }
 CMD_STRUCT;
 

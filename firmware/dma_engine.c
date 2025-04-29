@@ -120,10 +120,32 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
     return DMA_STATUS_BAD_INCR;
 
   /*
-   * Contended location means the DMA needs to work with the Z80 clock timings.
-   * When the ULA stops the Z80's clock, the DMA process needs to stop as well
+   * Modes:
+   *
+   * contended means 0x4000 to 0x7FFF on the fly. The DMA can happen at the speed the
+   * ULA can drive RAS/CAS, but the transfer needs to respect memory contention. That
+   * means mimicking the Z80 exactly (i.e. stopping when the Z80 clock stops, etc).
+   * This mode doesn't work. 
+   * 
+   * top border means 0x4000 to 0x7FFF, but the Z80 program guarantees the DMA is
+   * happening in top border time. That means there can't be contention and the code
+   * here doesn't need to use Z80 timings. This is the fastest mode, it runs as fast
+   * as the ULA can drive RAS/CAS.
+   * 
+   * uncontended means 0x8000 to 0xFFFF. This is simple and reliable, no contention
+   * to worry about. But the DMA needs to run at the speed the 74-series logic chips
+   * can drive the 4164s at, which is slower than the ULA drives the 4116s.
    */
-  bool contended = false;
+  typedef enum
+  {
+    DMA_MODE_CONTENDED,
+    DMA_MODE_TOP_BORDER,
+    DMA_MODE_UNCONTENDED
+  }
+  DMA_MODE;
+
+  /* The mode to use is worked out with heuristics */
+  DMA_MODE mode;
 
   /*
    * If the start or end is in the contended memory, it's contended. I choose to check the
@@ -149,16 +171,18 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
       {
         /*
          * DMA into contended memory, but it's only small and we've been told it's
-         * happening in top border time, so no contention will happen. NOP
+         * happening in top border time, so no contention will happen.
          */
+        mode = DMA_MODE_TOP_BORDER;
       }
     }
     else
     {
       /* If contended location, and we're not running the transfer in top border time, Z80 write timings are essential */
-      contended = true;
+      mode = DMA_MODE_CONTENDED;
 
       /*
+       * @FIXME
        * In practise, although I think it should be possible to do a DMA into contended memory
        * outside top border time, as long as the Z80 clock is respected, it appears not to be.
        * My memset test fails absolutely consistently. I don't know why. This could stand
@@ -166,6 +190,11 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
        */
       return DMA_STATUS_CONTENTION_FAIL;
     }
+  }
+  else
+  {
+    /* Upper RAM (or possibly ROM), there is no contention so it's simple */
+    mode = DMA_MODE_UNCONTENDED;
   }
 
   /*
@@ -213,123 +242,309 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
   gpio_set_dir( GPIO_Z80_MREQ, GPIO_OUT ); gpio_put( GPIO_Z80_MREQ, 1 );
   gpio_set_dir( GPIO_Z80_WR,   GPIO_OUT ); gpio_put( GPIO_Z80_WR,   1 );
 
+  if( mode == DMA_MODE_CONTENDED )
+  {
   /* Blipper goes low while DMA process is active */
 //  gpio_put( GPIO_BLIPPER1, 0 );
 
-  /* Wait for rising edge of clock, syncs to start of T1 (Z80 manual fig 6, right side) */
-  while( gpio_get( GPIO_Z80_CLK ) == 0 );  
+    /*
+     * @FIXME We're DMAing into contended memory. In theory, as long as this code matches
+     * exactly what the Z80 does, the ULA will stop it as required and the DMA will work.
+     * In practise it doesn't work. Running the memset test into 0x4000 to 0x7FFF results
+     * in incorrect values in ZX memory, even though the logic analyser shows the correct
+     * values are sent. For the time being, this code is best not used since it can't
+     * reliably DMA into contended memory.
+     */
+
+    /*
+    * This matches the Z80's timings on the bus. It syncs to the clock signal. As far as
+    * I can tell, the ULA can't tell the difference between the RP2350 running this code
+    * and the Z80 it normally writes memory for. But it doesn't seem to avoid the issue
+    * with contention, so I suspect it's not an exact copy of the Z80. I think the RP is
+    * not quite quick enough, perhaps at the start of the loop where it gets the address
+    * on the bus then wait half a clock - that's the point the ULA decides on contention.
+    * 
+    * The contents of this loop takes 800ns per iteration, plus another 50ns for the loop.
+    * At 3.5MHz the 3-cycle write should take 857ns, so that looks right.
+    * 
+    * The problem here is that it's slow. A 6,912 byte screen contents DMA takes 5.92ms
+    * which is way slower than I'd like and nowhere near fast enough for top border time.
+    */
+
+    /* Wait for rising edge of clock, syncs to start of T1 (Z80 manual fig 6, right side) */
+    while( gpio_get( GPIO_Z80_CLK ) == 0 );  
     
-#define USING_Z80_TIMINGS 1
-#if USING_Z80_TIMINGS    
-  /*
-   * This matches the Z80's timings on the bus. It syncs to the clock signal. As far as
-   * I can tell, the ULA can't tell the difference between the RP2350 running this code
-   * and the Z80 it normally writes memory for.
-   * 
-   * The contents of this loop takes 800ns per iteration, plus another 50ns for the loop.
-   * At 3.5MHz the 3-cycle write should take 857ns, so that looks right.
-   * 
-   * The problem here is that it's slow. A 6,912 byte screen contents DMA takes 5.92ms
-   * which is way slower than I'd like and nowhere near fast enough for top border time.
-   */
-  uint32_t offset = 0;
-  for( uint32_t byte_counter=0; byte_counter < data_block->length; byte_counter++ )
-  {
-    /* Set address of ZX byte to write to */
-    gpio_put_masked( GPIO_ABUS_BITMASK, (data_block->zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
+    uint32_t offset = 0;
+    for( uint32_t byte_counter=0; byte_counter < data_block->length; byte_counter++ )
+    {
+      /* Set address of ZX byte to write to */
+      gpio_put_masked( GPIO_ABUS_BITMASK, (data_block->zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
 
-    /* Wait for falling edge of clock, that's halfway through T1 */
-    while( gpio_get( GPIO_Z80_CLK ) == 1 );  
+      /* Wait for falling edge of clock, that's halfway through T1 */
+      while( gpio_get( GPIO_Z80_CLK ) == 1 );  
 
-    /* Assert memory request */
-    gpio_put( GPIO_Z80_MREQ, 0 );
+      /* Assert memory request */
+      gpio_put( GPIO_Z80_MREQ, 0 );
 
-    /* Put value on the data bus */
-    gpio_put_masked( GPIO_DBUS_BITMASK, *(data_block->src+offset) );
-    offset += data_block->incr;
+      /* Put value on the data bus */
+      gpio_put_masked( GPIO_DBUS_BITMASK, *(data_block->src+offset) );
+      offset += data_block->incr;
 
-    /*
-     * Wait for Z80 clock to rise and fall - that's at the clock low point halfway through T2
-     */
-    while( gpio_get( GPIO_Z80_CLK ) == 0 );    
-    while( gpio_get( GPIO_Z80_CLK ) == 1 );   
+      /*
+      * Wait for Z80 clock to rise and fall - that's at the clock low point halfway through T2
+      */
+      while( gpio_get( GPIO_Z80_CLK ) == 0 );    
+      while( gpio_get( GPIO_Z80_CLK ) == 1 );   
 
-    /*
-     * Assert the write line to write it, the ULA responds to this and does
-     * the write into the Spectrum's memory. i.e. the RAS/CAS stuff.
-     */
-    gpio_put( GPIO_Z80_WR, 0 );
+      /*
+      * Assert the write line to write it, the ULA responds to this and does
+      * the write into the Spectrum's memory. i.e. the RAS/CAS stuff.
+      */
+      gpio_put( GPIO_Z80_WR, 0 );
 
-    /*
-     * Wait for Z80 clock to rise and fall again - that takes us
-     * to the beginning of, and then the halfway point of, T3
-     */
-    while( gpio_get( GPIO_Z80_CLK ) == 0 );    
-    while( gpio_get( GPIO_Z80_CLK ) == 1 );   
+      /*
+      * Wait for Z80 clock to rise and fall again - that takes us
+      * to the beginning of, and then the halfway point of, T3
+      */
+      while( gpio_get( GPIO_Z80_CLK ) == 0 );    
+      while( gpio_get( GPIO_Z80_CLK ) == 1 );   
 
-    /* Update local mirror to match the ZX RAM */
-    put_zx_mirror_byte( data_block->zx_ram_location+byte_counter, *(data_block->src+byte_counter) );
+      /* Update local mirror to match the ZX RAM */
+      put_zx_mirror_byte( data_block->zx_ram_location+byte_counter, *(data_block->src+byte_counter) );
 
-    /* Remove write and memory request */
-    gpio_put( GPIO_Z80_WR,   1 );
-    gpio_put( GPIO_Z80_MREQ, 1 ); 
+      /* Remove write and memory request */
+      gpio_put( GPIO_Z80_WR,   1 );
+      gpio_put( GPIO_Z80_MREQ, 1 ); 
 
-    /* Wait for the next rising edge of the clock - that's the end of T3 / start of T1 */
-    while( gpio_get( GPIO_Z80_CLK ) == 0 );    
+      /* Wait for the next rising edge of the clock - that's the end of T3 / start of T1 */
+      while( gpio_get( GPIO_Z80_CLK ) == 0 );    
+    }
   }
-#else
-  /*
-   * I need to drive the ULA's writes faster than the Z80 normally does. The question
-   * is, how fast can I go while retaining complete reliability?
-   */
-  for( uint32_t byte_counter=0; byte_counter < length; byte_counter++ )
+  else if( mode == DMA_MODE_TOP_BORDER )
   {
-  gpio_put( GPIO_BLIPPER1, 1 );
+  /* Blipper goes low while DMA process is active */
+//  gpio_put( GPIO_BLIPPER1, 0 );
 
-    /* Set address of ZX byte to write to */
-    gpio_put_masked( GPIO_ABUS_BITMASK, (zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
+    uint32_t offset = 0;
+    for( uint32_t byte_counter=0; byte_counter < data_block->length; byte_counter++ )
+    {
+      /* Contents of this loop takes 435ns */
+      
+      /* Set up of buses takes ~150ns */
 
-    /* Wait for falling edge of clock, that's halfway through T1 */
-    while( gpio_get( GPIO_Z80_CLK ) == 1 );  
+      /* Set address of ZX byte to write to */
+      gpio_put_masked( GPIO_ABUS_BITMASK, (data_block->zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
 
-    /* Assert memory request */
-    gpio_put( GPIO_Z80_MREQ, 0 );
+      /* Assert memory request */
+      gpio_put( GPIO_Z80_MREQ, 0 );
 
-    /* Put value on the data bus */
-    gpio_put_masked( GPIO_DBUS_BITMASK, *(src+byte_counter) );
+      /* Put value on the data bus */
+      gpio_put_masked( GPIO_DBUS_BITMASK, *(data_block->src+offset) );
+      offset += data_block->incr;
 
-    /*
-     * Wait for Z80 clock to rise and fall - that's at the clock low point halfway through T2
-     */
-    while( gpio_get( GPIO_Z80_CLK ) == 0 );    
-    while( gpio_get( GPIO_Z80_CLK ) == 1 );   
+      /*
+      * Assert the write line to write it, the ULA responds to this and does
+      * the write into the Spectrum's memory. i.e. the RAS/CAS stuff.
+      */
+      gpio_put( GPIO_Z80_WR, 0 );
 
-    /*
-     * Assert the write line to write it, the ULA responds to this and does
-     * the write into the Spectrum's memory. i.e. the RAS/CAS stuff.
-     */
-    gpio_put( GPIO_Z80_WR, 0 );
+      /*
+      * The timing theory:
+      * Spectrum RAM is rated 150ns which is 1.5e-07. RP2350 clock speed is
+      * 200,000,000Hz (overclocked), so one clock cycle is 5ns. So that's 30
+      * RP2350 clock cycles in one DRAM transaction time. NOP is T1, so it
+      * takes one clock cycle, so 30 NOPs should guarantee a pause long
+      * enough for the 4116s to respond.
+      * 
+      * I need to support both the original 4116s and the modern static RAM
+      * memory module boards. It turns out the 4116s are slower.
+      * Empirical testing shows it needs 37 RP2350 cycles.
+      */
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
 
-    /*
-     * Wait for Z80 clock to rise and fall again - that takes us
-     * to the beginning of, and then the halfway point of, T3
-     */
-    while( gpio_get( GPIO_Z80_CLK ) == 0 );    
-    while( gpio_get( GPIO_Z80_CLK ) == 1 );   
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
 
-    /* Update local mirror to match the ZX RAM */
-    put_zx_mirror_byte( zx_ram_location+byte_counter, *(src+byte_counter) );
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
 
-    /* Remove write and memory request */
-    gpio_put( GPIO_Z80_WR,   1 );
-    gpio_put( GPIO_Z80_MREQ, 1 ); 
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
 
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
 
-    /* Wait for the next rising edge of the clock - that's the end of T3 / start of T1 */
-    while( gpio_get( GPIO_Z80_CLK ) == 0 );    
-  gpio_put( GPIO_BLIPPER1, 0 );
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      /* Mirror and buses reset takes ~100ns */
+
+      /* Update local mirror to match the ZX RAM */
+      put_zx_mirror_byte( data_block->zx_ram_location+byte_counter, *(data_block->src+byte_counter) );
+
+      /* Remove write and memory request */
+      gpio_put( GPIO_Z80_WR,   1 );
+      gpio_put( GPIO_Z80_MREQ, 1 ); 
+    }
   }
-#endif
+  else if( mode == DMA_MODE_UNCONTENDED )
+  {
+    /*
+     * DMA into upper memory. This 4164 based DRAM is driven by RAS/CAS signals generated by
+     * logic chips (as opposed to the ULA which does that job for the lower RAM). This code
+     * needs to run with timings based on what those ICs can manage.
+     */
+
+    /* Blipper goes low while DMA process is active */
+    gpio_put( GPIO_BLIPPER1, 0 );
+
+    uint32_t offset = 0;
+    for( uint32_t byte_counter=0; byte_counter < data_block->length; byte_counter++ )
+    {
+      /* Contents of this loop takes 435ns */
+      
+      /* Set up of buses takes ~150ns */
+
+      /* Set address of ZX byte to write to */
+      gpio_put_masked( GPIO_ABUS_BITMASK, (data_block->zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
+
+      /* Assert memory request */
+      gpio_put( GPIO_Z80_MREQ, 0 );
+
+      /* Put value on the data bus */
+      gpio_put_masked( GPIO_DBUS_BITMASK, *(data_block->src+offset) );
+      offset += data_block->incr;
+
+      /*
+      * Assert the write line to write it, the logic responds to this and does
+      * the write into the Spectrum's memory. i.e. the RAS/CAS stuff.
+      */
+      gpio_put( GPIO_Z80_WR, 0 );
+
+      /*
+      * The timing theory:
+      * Spectrum RAM is rated 150ns which is 1.5e-07. RP2350 clock speed is
+      * 200,000,000Hz (overclocked), so one clock cycle is 5ns. So that's 30
+      * RP2350 clock cycles in one DRAM transaction time. However, I'm not
+      * driving the chips, the logic generates the RAS/CAS signals that do
+      * that.
+      * 
+      * SN74LS32 logic switches at max 22ns, and there's 3 such gates. Plus
+      * SN74LS00 logic which switches at 15ns, and there's 2. All in series
+      * so 22+22+22+15+15=96ns, plus max 150ns for the DRAM is 246ns max.
+      * 
+      * At 200MHz, 50 NOPs is 250ns, so 50 NOPs here.
+      * 
+      * I would admit this is a bit hand wavy... :)
+      * 
+      * At 200MHz this takes about 3.65ms to DMA around 8KB with 50 NOPs.
+      */
+     {
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      }
+
+      /* Mirror and buses reset takes ~100ns */
+
+      /* Update local mirror to match the ZX RAM */
+      put_zx_mirror_byte( data_block->zx_ram_location+byte_counter, *(data_block->src+byte_counter) );
+
+      /* Remove write and memory request */
+      gpio_put( GPIO_Z80_WR,   1 );
+      gpio_put( GPIO_Z80_MREQ, 1 ); 
+    }
+
+  }
+  else
+  {
+    /* Can't happen */
+    return DMA_STATUS_CONTENTION_FAIL;
+  }
 
   /*
    * Empirical testing shows this DMA teardown takes at most 1.6us.
@@ -351,7 +566,7 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
   while( gpio_get( GPIO_Z80_BUSACK ) == 0 );
 
   /* Indicate DMA process complete, inactive */
-//  gpio_put( GPIO_BLIPPER1, 1 );
+  gpio_put( GPIO_BLIPPER1, 1 );
 
   return DMA_STATUS_OK;
 }
