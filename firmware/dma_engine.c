@@ -198,10 +198,10 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
   }
 
   /*
-   * The Spectrum can't afford to miss an interrupt, so if one is approaching, spin
-   * while it passes
+   * The Spectrum can't afford to miss an interrupt, so if one is approaching,
+   * and the Z80 cares, spin while it passes
    */
-  if( int_protection )
+  if( !data_block->ignore_interrupt && int_protection )
   {
     /*
      * A combination of the int_unsafe PIO program and
@@ -322,8 +322,8 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
   }
   else if( mode == DMA_MODE_TOP_BORDER )
   {
-  /* Blipper goes low while DMA process is active */
-//  gpio_put( GPIO_BLIPPER1, 0 );
+    /* Blipper goes low while DMA process is active */
+    gpio_put( GPIO_BLIPPER1, 0 );
 
     uint32_t offset = 0;
     for( uint32_t byte_counter=0; byte_counter < data_block->length; byte_counter++ )
@@ -352,12 +352,16 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
       * The timing theory:
       * Spectrum RAM is rated 150ns which is 1.5e-07. RP2350 clock speed is
       * 200,000,000Hz (overclocked), so one clock cycle is 5ns. So that's 30
-      * RP2350 clock cycles in one DRAM transaction time. NOP is T1, so it
-      * takes one clock cycle, so 30 NOPs should guarantee a pause long
-      * enough for the 4116s to respond.
+      * RP2350 clock cycles in one DRAM transaction time. However, I'm not
+      * driving the chips, the ULA generates the RAS/CAS signals.
+      * 
+      * I don't know the characteristics of the logic devices inside the ULA.
+      * Emprical testing is all I can do, and that suggests that it's faster
+      * than the SN74LSxx logic that drives the upper RAM.
       * 
       * I need to support both the original 4116s and the modern static RAM
       * memory module boards. It turns out the 4116s are slower.
+      * 
       * Empirical testing shows it needs 37 RP2350 cycles.
       */
       __asm volatile ("nop");
@@ -424,7 +428,7 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
      */
 
     /* Blipper goes low while DMA process is active */
-    gpio_put( GPIO_BLIPPER1, 0 );
+    //gpio_put( GPIO_BLIPPER1, 0 );
 
     uint32_t offset = 0;
     for( uint32_t byte_counter=0; byte_counter < data_block->length; byte_counter++ )

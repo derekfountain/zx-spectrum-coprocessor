@@ -54,6 +54,14 @@ typedef enum
 }
 CMD_ERROR;
 
+/* Flags the Z80 can pass into the coprocessor command */
+typedef enum
+{
+  CMD_FLAG_IGNORE_INT = 0x01,     // Z80 program isn't worried about interrupts (probably DI'ed)
+  CMD_FLAG_TOP_BORDER = 0x02,     // Z80 program is running this DMA in top border time
+}
+CMD_FLAGS;
+
 /*
  * This structure defines a coprocessor request. It's created on the Spectrum
  * from where the coprocessor reads its contents (e.g. type) and writes back the
@@ -67,6 +75,7 @@ typedef struct _cmd_struct
   ZXCOPRO_STATUS status;    // Output from copro, the final status of the command
   CMD_ERROR      error;     // Output from copro, if status is ZXCOPRO_ERROR, this
                             // can contain a further error code
+  uint8_t        flags;     // See CMD_FLAGS enumeration
 }
 CMD_STRUCT;
 

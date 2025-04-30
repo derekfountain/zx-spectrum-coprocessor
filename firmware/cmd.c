@@ -33,6 +33,7 @@
  */
 void dma_status_to_zx( ZXCOPRO_STATUS status, ZX_ADDR status_zx_addr, ZX_ADDR error_zx_addr )
 {
+  /* @FIXME What if the original DMA was top border time? */
   DMA_BLOCK block = { (uint8_t*)&status, status_zx_addr, 1, 0 };
   if( dma_memory_block( &block, true ) != DMA_STATUS_OK )
   {
@@ -53,6 +54,7 @@ void dma_status_to_zx( ZXCOPRO_STATUS status, ZX_ADDR status_zx_addr, ZX_ADDR er
  */
 void dma_error_to_zx( ZXCOPRO_STATUS error_code, ZX_ADDR status_zx_addr, ZX_ADDR error_zx_addr )
 {
+  /* @FIXME What if the original DMA was top border time? */
   DMA_BLOCK err_block = { (uint8_t*)&error_code, error_zx_addr, 1, 0 };
   (void)dma_memory_block( &err_block, true );
 

@@ -59,6 +59,7 @@ static void immediate_cmd_memset( ZX_ADDR cmd_zx_addr, ZX_ADDR status_zx_addr, Z
    * pointer into RP memory.
    */
   const CMD_STRUCT *cmd_ptr = query_zx_mirror_ptr( cmd_zx_addr );
+  const uint8_t     flags   = cmd_ptr->flags;
 
   /* The memset command structure immediately follows the command structure */
   MEMSET_CMD *memset_cmd_ptr = (MEMSET_CMD*)((uint8_t*)cmd_ptr + sizeof( CMD_STRUCT ));
@@ -69,7 +70,12 @@ static void immediate_cmd_memset( ZX_ADDR cmd_zx_addr, ZX_ADDR status_zx_addr, Z
   const ZX_WORD   n       = memset_cmd_ptr->n[0] + memset_cmd_ptr->n[1]*256;
 
   /* DMA the values to set, no increment on the block src pointer */
-  DMA_BLOCK block = { (uint8_t*)src, zx_addr, n, 0 };
+  DMA_BLOCK block = { .src = (uint8_t*)src,
+                      .zx_ram_location = zx_addr,
+                      .length = n,
+                      .incr = 0,
+                      .top_border_time = (flags & CMD_FLAG_TOP_BORDER),
+                      .ignore_interrupt = (flags & CMD_FLAG_IGNORE_INT) };
   DMA_STATUS status;
   if( (status=dma_memory_block( &block, true )) == DMA_STATUS_OK )
   {
@@ -167,8 +173,8 @@ void service_immediate_cmd( ZX_ADDR cmd_zx_addr )
    * We have the start of the CMD_STRUCT in the Z80 address space. The status to the ZX from
    * the copro goes back in a member of that structure, or maybe an error.
    */
-  const ZX_ADDR status_zx_addr = cmd_zx_addr + offsetof( CMD_STRUCT, status );
-  const ZX_ADDR error_zx_addr  = cmd_zx_addr + offsetof( CMD_STRUCT, error );
+  const ZX_ADDR status_zx_addr =   cmd_zx_addr + offsetof( CMD_STRUCT, status );
+  const ZX_ADDR error_zx_addr  =   cmd_zx_addr + offsetof( CMD_STRUCT, error );
 
   /*
    * Pick up the address in RP memory of the command structure and fetch the

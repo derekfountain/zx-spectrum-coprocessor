@@ -51,6 +51,7 @@ typedef struct _dma_block
   ZX_ADDR   zx_ram_location;   // Location in ZX memory to write into
   uint32_t  length;            // Number of bytes to write
   uint32_t  incr;              // Number of bytes to increment src by
+  bool      ignore_interrupt;  // True if the Z80 is OK to ignore interrupt protection
   bool      top_border_time;   // True if the Z80 has set the DMA to run in top border time
 
   struct _dma_block* next_ptr; // Pointer to next one of these
