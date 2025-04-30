@@ -1,5 +1,5 @@
 /*
- * zcc +zx -vn -startup=4 -clib=sdcc_iy memset.c -o z80_image
+ * zcc +zx -vn -startup=4 -clib=sdcc_iy memset.c ../common/cmd.c -o z80_image
  * xxd -i -c 16 z80_image_CODE.bin > ../../../firmware/z80_image.h
  */
 
@@ -11,43 +11,30 @@
 #include <z80.h>
 #include <intrinsic.h>
 
+#include "../common/cmd.h"
+
 void main(void)
 {
-  intrinsic_di();
-
-  /* Compiler gives internal error if this isn't static */
-  static uint8_t memset_cmd[] =
-  {
-    128, 0,                    // CMD type and flags
-    0, 0,                      // Status and error
-
-    0x00, 0x00,                // zx_addr to set memory at
-    0x00,                      // c, constant value to set
-    0, 0,                      // n, 16 bit count to set
-  };
-
   ioctl(1, IOCTL_OTERM_PAUSE, 0);
+
+  MEMSET_INIT(memset_cmd);
 
   uint32_t check_counter = 0;
   uint8_t  c_value = 0;
   srand( 1000 );
   while(1)
   {
-    uint8_t  length = (rand() & 0x1F)+1;
+    uint16_t length = (rand() & 0x7FE)+1;
 
 //  uint16_t dest_addr = 0x5BC0;            // Lower RAM, contended, printer buffer, doesn't work
     uint16_t dest_addr = 0xC000;            // Upper RAM, not contended, above code, below stack
 
-    memset_cmd[2] = 0;    // Status
-    memset_cmd[3] = 0;    // Error
+    CMD_CLEAR_STATUS(memset_cmd);
+    CMD_CLEAR_ERROR(memset_cmd);
 
-    memset_cmd[4] = dest_addr & 0xFF;
-    memset_cmd[5] = (dest_addr>>8) & 0xFF;
-
-    memset_cmd[6] = c_value;
-
-    memset_cmd[7] = length;
-    memset_cmd[8] = 0;
+    MEMSET_SET_DEST(memset_cmd,dest_addr);
+    MEMSET_SET_C(memset_cmd,c_value);
+    MEMSET_SET_LENGTH(memset_cmd,length);
 
     printf("Check %ld, %02X times %d bytes?\n", check_counter, c_value, length);
 
@@ -57,17 +44,12 @@ void main(void)
 	   memset_cmd[6],
 	   memset_cmd[7],memset_cmd[8]);
 
-    *((uint16_t*)14446) = (uint16_t)(&memset_cmd[0]);
-    
-#define ZXCOPRO_NONE  0
-#define ZXCOPRO_OK    1
-#define ZXCOPRO_ERROR 2
-    while( memset_cmd[2] == ZXCOPRO_NONE )
-      printf("+\n");  // Spin on status going to 1
+    CMD_TRIGGER_IMMEDIATE_CMD( memset_cmd );
+    CMD_SPIN_ON_STATUS( memset_cmd );
 
-    if( memset_cmd[2] == ZXCOPRO_ERROR )
+    if( CMD_IS_COPRO_ERROR( memset_cmd ) )
     {
-      printf("Error is %d\n", memset_cmd[3]);
+      printf("Error is %d\n", CMD_QUERY_COPRO_ERROR( memset_cmd ) );
       while(1);
     }
 
