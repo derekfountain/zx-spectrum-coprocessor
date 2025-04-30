@@ -72,10 +72,12 @@ CMD_FLAGS;
 typedef struct _cmd_struct
 {
   ZXCOPRO_CMD    type;      // Input to copro, the type of command the Z80 wants
+                            // @TODO I could reuse this as the status output, save a byte?
+  uint8_t        flags;     // Input to copro, see CMD_FLAGS enumeration
+
   ZXCOPRO_STATUS status;    // Output from copro, the final status of the command
   CMD_ERROR      error;     // Output from copro, if status is ZXCOPRO_ERROR, this
                             // can contain a further error code
-  uint8_t        flags;     // See CMD_FLAGS enumeration
 }
 CMD_STRUCT;
 

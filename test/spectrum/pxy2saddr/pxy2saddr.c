@@ -15,8 +15,8 @@ void main(void)
   /* Compiler gives internal error if this isn't static */
   static uint8_t pxy2saddr_cmd[] =
   {
-    129, 0, 0,                 // CMD type, result and error
-    0,                         // Flags
+    129, 0,                    // CMD type and flags
+    0, 0,                      // Status and error
 
     0x00, 0x00,                // x,y pixels
     0, 0,                      // answer
@@ -26,9 +26,8 @@ void main(void)
 
   while(1)
   {
-    pxy2saddr_cmd[1] = 0;    // Response
-    pxy2saddr_cmd[2] = 0;    // Error
-    pxy2saddr_cmd[3] = 0;    // Flags
+    pxy2saddr_cmd[2] = 0;    // Status
+    pxy2saddr_cmd[3] = 0;    // Error
 
     pxy2saddr_cmd[4] = 0;    // x
     pxy2saddr_cmd[5] = 1;    // y
@@ -49,12 +48,12 @@ void main(void)
 
     *((uint16_t*)14446) = (uint16_t)(&pxy2saddr_cmd[0]);
 
-    while( pxy2saddr_cmd[1] == ZXCOPRO_NONE )
+    while( pxy2saddr_cmd[2] == ZXCOPRO_NONE )
       printf("+\n");  // Spin on status going to 1
 
-    if( pxy2saddr_cmd[1] == ZXCOPRO_ERROR )
+    if( pxy2saddr_cmd[2] == ZXCOPRO_ERROR )
     {
-      printf("Error is %d\n", pxy2saddr_cmd[2]);
+      printf("Error is %d\n", pxy2saddr_cmd[3]);
       while(1);
     }
 
@@ -70,26 +69,26 @@ void main(void)
       do
       {
 #if 1
-	pxy2saddr_cmd[1] = 0;    // Response
+	pxy2saddr_cmd[2] = 0;    // Status
 
 	pxy2saddr_cmd[4] = x;    // x
 	pxy2saddr_cmd[5] = y;    // y
 
-	uint16_t pxy2saddr_cmd_addr = (uint16_t)(&pxy2saddr_cmd[0]);
-	*((uint8_t*)14446) = (uint8_t)(pxy2saddr_cmd_addr & 0xFF);
-	*((uint8_t*)14447) = (uint8_t)((pxy2saddr_cmd_addr >> 8) & 0xFF);
+//	uint16_t pxy2saddr_cmd_addr = (uint16_t)(&pxy2saddr_cmd[0]);
+//	*((uint8_t*)14446) = (uint8_t)(pxy2saddr_cmd_addr & 0xFF);
+//	*((uint8_t*)14447) = (uint8_t)((pxy2saddr_cmd_addr >> 8) & 0xFF);
 
-//	*((uint16_t*)14446) = (uint16_t)(&pxy2saddr_cmd[0]);
+	*((uint16_t*)14446) = (uint16_t)(&pxy2saddr_cmd[0]);
 
 	/*
 	 * This takes about 3.15 secs to fill the screen. Using a pointer
          * to this location results in the exact same code
 	 */
-	while( pxy2saddr_cmd[1] == ZXCOPRO_NONE );
+	while( pxy2saddr_cmd[2] == ZXCOPRO_NONE );
 
-	if( pxy2saddr_cmd[1] == ZXCOPRO_ERROR )
+	if( pxy2saddr_cmd[2] == ZXCOPRO_ERROR )
 	{
-	  printf("Error is %d\n", pxy2saddr_cmd[2]);
+	  printf("Error is %d\n", pxy2saddr_cmd[3]);
 	  while(1);
 	}
 

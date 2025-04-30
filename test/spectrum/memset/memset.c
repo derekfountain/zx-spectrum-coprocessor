@@ -18,8 +18,8 @@ void main(void)
   /* Compiler gives internal error if this isn't static */
   static uint8_t memset_cmd[] =
   {
-    128, 0, 0,                 // CMD type, status and error
-    0,                         // Flags
+    128, 0,                    // CMD type and flags
+    0, 0,                      // Status and error
 
     0x00, 0x00,                // zx_addr to set memory at
     0x00,                      // c, constant value to set
@@ -38,9 +38,8 @@ void main(void)
 //  uint16_t dest_addr = 0x5BC0;            // Lower RAM, contended, printer buffer, doesn't work
     uint16_t dest_addr = 0xC000;            // Upper RAM, not contended, above code, below stack
 
-    memset_cmd[1] = 0;    // Response
-    memset_cmd[2] = 0;    // Error
-    memset_cmd[3] = 0;    // Flags
+    memset_cmd[2] = 0;    // Status
+    memset_cmd[3] = 0;    // Error
 
     memset_cmd[4] = dest_addr & 0xFF;
     memset_cmd[5] = (dest_addr>>8) & 0xFF;
@@ -63,12 +62,12 @@ void main(void)
 #define ZXCOPRO_NONE  0
 #define ZXCOPRO_OK    1
 #define ZXCOPRO_ERROR 2
-    while( memset_cmd[1] == ZXCOPRO_NONE )
+    while( memset_cmd[2] == ZXCOPRO_NONE )
       printf("+\n");  // Spin on status going to 1
 
-    if( memset_cmd[1] == ZXCOPRO_ERROR )
+    if( memset_cmd[2] == ZXCOPRO_ERROR )
     {
-      printf("Error is %d\n", memset_cmd[2]);
+      printf("Error is %d\n", memset_cmd[3]);
       while(1);
     }
 
