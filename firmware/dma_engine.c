@@ -463,9 +463,25 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
       * 
       * SN74LS32 logic switches at max 22ns, and there's 3 such gates. Plus
       * SN74LS00 logic which switches at 15ns, and there's 2. All in series
-      * so 22+22+22+15+15=96ns, plus max 150ns for the DRAM is 246ns max.
+      * so 22+22+22+15+15=96ns, plus another 27ns for the 74LS157s to switch
+      * (simultaneously), so 123ns in absolute worst case for the RAS/CAS
+      * signals to be generated and applied to the 4164s.
       * 
-      * At 200MHz, 50 NOPs is 250ns, so 50 NOPs here.
+      * If I read the datasheet correctly, there then needs to be a data hold
+      * time of 45ns (th(CLD)), but that's concurrent with the 150ns it takes 
+      * for the 4164 to do the write, so the hold time can be ignored as long
+      * as I don't whip the data away too quickly.
+      * 
+      * So it worst case timing appears to be 123ns + 150ns which is 273ns.
+      * 
+      * But how much is really needed? 273s is absolute worst case for all the
+      * chips in the sequence, and there's a bit of time after these NOPs while
+      * the local mirror is updated and the WR and MREQ lines are pulled inactive. 
+      * Emprical testing shows it's (apparently) 100% reliable with 250ns worth
+      * of NOPs at this point.
+      * 
+      * That's the call then, at 200MHz, 50 NOPs is 250ns, so 50 NOPs here.
+      * If it ever shows unreliabilty I'd add 5 more NOPs to clear the 275ns.
       * 
       * I would admit this is a bit hand wavy... :)
       * 
