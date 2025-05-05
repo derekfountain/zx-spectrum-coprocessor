@@ -188,7 +188,7 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
        * My memset test fails absolutely consistently. I don't know why. This could stand
        * further investigation, it'd be nice to make it work.
        */
-      return DMA_STATUS_CONTENTION_FAIL;
+//      return DMA_STATUS_CONTENTION_FAIL;
     }
   }
   else
@@ -245,7 +245,7 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
   if( mode == DMA_MODE_CONTENDED )
   {
   /* Blipper goes low while DMA process is active */
-//  gpio_put( GPIO_BLIPPER1, 0 );
+  //gpio_put( GPIO_BLIPPER1, 0 );
 
     /*
      * @FIXME We're DMAing into contended memory. In theory, as long as this code matches
@@ -428,7 +428,7 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
      */
 
     /* Blipper goes low while DMA process is active */
-    //gpio_put( GPIO_BLIPPER1, 0 );
+    gpio_put( GPIO_BLIPPER1, 0 );
 
     uint32_t offset = 0;
     for( uint32_t byte_counter=0; byte_counter < data_block->length; byte_counter++ )
@@ -472,7 +472,7 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
       * for the 4164 to do the write, so the hold time can be ignored as long
       * as I don't whip the data away too quickly.
       * 
-      * So it worst case timing appears to be 123ns + 150ns which is 273ns.
+      * So the worst case timing appears to be 123ns + 150ns which is 273ns.
       * 
       * But how much is really needed? 273s is absolute worst case for all the
       * chips in the sequence, and there's a bit of time after these NOPs while
@@ -480,14 +480,19 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
       * Emprical testing shows it's (apparently) 100% reliable with 250ns worth
       * of NOPs at this point.
       * 
-      * That's the call then, at 200MHz, 50 NOPs is 250ns, so 50 NOPs here.
-      * If it ever shows unreliabilty I'd add 5 more NOPs to clear the 275ns.
+      * That's the call then, at 200MHz 55 NOPs is 275ns, so 55 NOPs here.
       * 
       * I would admit this is a bit hand wavy... :)
       * 
-      * At 200MHz this takes about 3.65ms to DMA around 8KB with 50 NOPs.
+      * At 200MHz this takes about 3.65ms to DMA around 8KB with 55 NOPs.
       */
      {
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
       __asm volatile ("nop");
       __asm volatile ("nop");
       __asm volatile ("nop");

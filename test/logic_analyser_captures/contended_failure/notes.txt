@@ -1,3 +1,67 @@
+successful_1.png is a capture of a DMA which worked. This was the
+memset test going to screen (0x4000).
+
+Yellow is blipper1, low while the DMA happens.
+Cyan is MREQ.
+Magenta is WR.
+Blue is the CLK.
+
+The DMA starts as yellow goes low. The code waits for the rising
+CLK, which is already high, so yellow goes low immediately.
+
+The address goes on the bus, then it spins waiting for CLK to go
+low, which it does at the 2nd division. MREQ is pulled low at that
+point. It then spins while CLK is low, and then again while CLK is
+high. It escapes the while low, while high pair at just about
+the 3rd division.
+
+WR then goes low and the ULA does its thing.
+
+It spins for CLK to go high again, which it does at division 4,
+then immediately spins for CLK to go low again, which it does
+just before division 5. That's the point of the mirror update
+in the code which takes a small amount of time.
+
+WR and MREQ are released just after division 5.
+
+It then spins looking for CLK to go high again. I *think* at
+this point, which is at the very bottom of the loop, it already is.
+So it goes round, puts the next address on the bus and waits for
+the CLK to go low, which it is at division 6. MREQ is pulled low
+and it starts the next byte.
+
+If there's a hole in this it's at the end, where it's looking for
+the rising edge of the CLK before it iterates. That appears to
+be skipped because the rising edge happened just before WR and MREQ
+are raised again. It's already high, so that last wait for high is
+skipped.
+
+
+successful_2.png is a whole DMA transfer.
+
+Yellow is blipper1, low while the DMA happens.
+Cyan is MREQ.
+Magenta is WR.
+Blue is the CLK.
+
+The control bus signals are fuzzy. Zoom in...
+
+successful_3.png is the start of that DMA transfer. The CLK is going
+flat - stopped - in regular bursts. MREQ remains active, with my code
+pulling it low then spinning while the CLK goes high then low again
+before pulling WR low. The pause before WR goes low matches the clock
+being stopped, so I'm pretty sure this is showing my DMA being stopped
+while the ULA enforces contention.
+
+This is what I'd expect to happen, and the memset test which is driving
+it continues to run without error. The pattern shown in the signals in
+successful_2.png is the contention pausing while the border is drawn.
+
+
+
+
+LA Capture
+==========
 This is a capture of a failed memset test, which was trying to
 set contended memory. The test would have been loaded into ZX RAM
 (first DMA transfer), then the test transfer happened - byte 00x25
