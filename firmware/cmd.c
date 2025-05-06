@@ -22,6 +22,7 @@
 #include "zx_copro.h"
 #include "cmd.h"
 #include "dma_engine.h"
+#include "trace_table.h"
 
 /*
  * Return a status to the Spectrum in the original DMA command structure. The
@@ -33,6 +34,8 @@
  */
 void dma_status_to_zx( ZXCOPRO_STATUS status, ZX_ADDR status_zx_addr, ZX_ADDR error_zx_addr )
 {
+  trace_table_set_status( status );
+  
   /* @FIXME What if the original DMA was top border time? */
   DMA_BLOCK block = { (uint8_t*)&status, status_zx_addr, 1, 0 };
   if( dma_memory_block( &block, true ) != DMA_STATUS_OK )
@@ -54,9 +57,14 @@ void dma_status_to_zx( ZXCOPRO_STATUS status, ZX_ADDR status_zx_addr, ZX_ADDR er
  */
 void dma_error_to_zx( ZXCOPRO_STATUS error_code, ZX_ADDR status_zx_addr, ZX_ADDR error_zx_addr )
 {
+  trace_table_set_error( error_code );
+
   /* @FIXME What if the original DMA was top border time? */
   DMA_BLOCK err_block = { (uint8_t*)&error_code, error_zx_addr, 1, 0 };
   (void)dma_memory_block( &err_block, true );
+
+
+  trace_table_set_status( ZXCOPRO_ERROR );
 
   const ZXCOPRO_STATUS error_status = ZXCOPRO_ERROR;
   DMA_BLOCK status_block = { (uint8_t*)&error_status, status_zx_addr, 1, 0 };

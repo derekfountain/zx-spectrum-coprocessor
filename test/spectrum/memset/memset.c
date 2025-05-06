@@ -52,7 +52,7 @@ void main(void)
 #endif
 
     CMD_TRIGGER_IMMEDIATE_CMD( memset_cmd );
-static uint8_t border = 0;
+    static uint8_t border = 0;
     CMD_SPIN_ON_STATUS( memset_cmd )
     {
       zx_border(border++);
@@ -76,8 +76,8 @@ static uint8_t border = 0;
       }
     }
 #if 0
-    printf("Check %ld, %02X times %d bytes OK!\n", ++check_counter, c_value++, length);
+    printf("Check %ld, %02X times %d bytes OK!\n", check_counter++, c_value++, length);
 #endif
-    z80_delay_ms(1000);
+//    z80_delay_ms(1000);
   }
 }

@@ -22,6 +22,7 @@
 #include "cmd_immediate.h"
 #include "dma_engine.h"
 #include "zx_mirror.h"
+#include "trace_table.h"
 
 /*
  * If the result of the DMA back to the Spectrum was an error, translate that
@@ -61,6 +62,8 @@ static void immediate_cmd_memset( ZX_ADDR cmd_zx_addr, ZX_ADDR status_zx_addr, Z
   const CMD_STRUCT *cmd_ptr = query_zx_mirror_ptr( cmd_zx_addr );
   const uint8_t     flags   = cmd_ptr->flags;
 
+  trace_table_set_cmd_args( cmd_ptr->type, flags );
+
   /* The memset command structure immediately follows the command structure */
   MEMSET_CMD *memset_cmd_ptr = (MEMSET_CMD*)((uint8_t*)cmd_ptr + sizeof( CMD_STRUCT ));
 
@@ -68,6 +71,8 @@ static void immediate_cmd_memset( ZX_ADDR cmd_zx_addr, ZX_ADDR status_zx_addr, Z
   const ZX_BYTE  *src    = &(memset_cmd_ptr->c);
   const ZX_ADDR   zx_addr = memset_cmd_ptr->zx_addr[0] + memset_cmd_ptr->zx_addr[1]*256;
   const ZX_WORD   n       = memset_cmd_ptr->n[0] + memset_cmd_ptr->n[1]*256;
+
+  trace_table_set_dma_args( src, zx_addr, n );
 
   /* DMA the values to set, no increment on the block src pointer */
   DMA_BLOCK block = { .src = (uint8_t*)src,
@@ -124,6 +129,9 @@ static void immediate_cmd_pxy2saddr( ZX_ADDR cmd_zx_addr, ZX_ADDR status_zx_addr
    * pointer into RP memory.
    */
   const CMD_STRUCT *cmd_ptr = query_zx_mirror_ptr( cmd_zx_addr );
+  const uint8_t     flags   = cmd_ptr->flags;
+
+  trace_table_set_cmd_args( cmd_ptr->type, flags );
 
   /* The memset command structure immediately follows the command structure */
   PXY2SADDR_CMD *pxy2saddr_ptr = (PXY2SADDR_CMD*)((uint8_t*)cmd_ptr + sizeof( CMD_STRUCT ));
@@ -141,6 +149,8 @@ static void immediate_cmd_pxy2saddr( ZX_ADDR cmd_zx_addr, ZX_ADDR status_zx_addr
     * ARM is little endian, so I can pass this straight back to Z80 land
     */
     ZX_ADDR answer = saddr_lut[y]+(x/8);
+
+    trace_table_set_dma_args( (uint8_t*)&answer, result_addr, 2 );
 
     /* DMA the values to set */
     DMA_BLOCK block = { (uint8_t*)&answer, result_addr, 2, 1 };
@@ -180,8 +190,11 @@ void service_immediate_cmd( ZX_ADDR cmd_zx_addr )
    * Pick up the address in RP memory of the command structure and fetch the
    * command type from it
    */
-  const CMD_STRUCT *cmd_ptr  = query_zx_mirror_ptr( cmd_zx_addr );
-  const ZXCOPRO_CMD cmd_type = cmd_ptr->type;
+  const CMD_STRUCT *cmd_ptr   = query_zx_mirror_ptr( cmd_zx_addr );
+  const ZXCOPRO_CMD cmd_type  = cmd_ptr->type;
+  const uint8_t     cmd_flags = cmd_ptr->flags;
+
+  trace_table_new_entry();
 
   /*
    * OK, whatever the Z80 program has requested, that's what we want to do.

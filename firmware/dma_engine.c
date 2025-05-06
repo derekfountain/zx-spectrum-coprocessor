@@ -180,15 +180,6 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
     {
       /* If contended location, and we're not running the transfer in top border time, Z80 write timings are essential */
       mode = DMA_MODE_CONTENDED;
-
-      /*
-       * @FIXME
-       * In practise, although I think it should be possible to do a DMA into contended memory
-       * outside top border time, as long as the Z80 clock is respected, it appears not to be.
-       * My memset test fails absolutely consistently. I don't know why. This could stand
-       * further investigation, it'd be nice to make it work.
-       */
-//      return DMA_STATUS_CONTENTION_FAIL;
     }
   }
   else
@@ -215,7 +206,7 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
   }
 
   /*
-   * Empirical testing shows the DMA initialisaiton setup takes at most 8.5us.
+   * Empirical testing shows the DMA initialiation setup takes at most 8.5us.
    * That's with a 200MHz overclock, but I'm not sure that makes much difference
    */
 
@@ -244,32 +235,28 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
 
   if( mode == DMA_MODE_CONTENDED )
   {
-  /* Blipper goes low while DMA process is active */
-  //gpio_put( GPIO_BLIPPER1, 0 );
+    /* Blipper goes low while DMA process is active */
+    //gpio_put( GPIO_BLIPPER1, 0 );
 
     /*
-     * @FIXME We're DMAing into contended memory. In theory, as long as this code matches
-     * exactly what the Z80 does, the ULA will stop it as required and the DMA will work.
-     * In practise it doesn't work. Running the memset test into 0x4000 to 0x7FFF results
-     * in incorrect values in ZX memory, even though the logic analyser shows the correct
-     * values are sent. For the time being, this code is best not used since it can't
-     * reliably DMA into contended memory.
+     * We're DMAing into contended memory. In theory, as long as this code matches
+     * exactly what the Z80 does, and so stops when the ULA stops the Z80's clock,
+     * it will match the Z80's contended behaviour and the contention won't disturb
+     * anything.
+     * 
+     * This approach is the slowest option, waiting for each clock edge in the same
+     * way the Z80 does.
+     *
+     * So, this matches the Z80's timings on the bus. It syncs to the clock signal. As far as
+     * I can tell, the ULA can't tell the difference between the RP2350 running this code
+     * and the Z80 it normally writes memory for.
+     * 
+     * The contents of this loop takes 800ns per iteration, plus another 50ns for the loop.
+     * At 3.5MHz the 3-cycle write should take 857ns, so that looks right.
+     * 
+     * The problem here is that it's slow. A 6,912 byte screen contents DMA takes 5.92ms
+     * which is way slower than I'd like and nowhere near fast enough for top border time.
      */
-
-    /*
-    * This matches the Z80's timings on the bus. It syncs to the clock signal. As far as
-    * I can tell, the ULA can't tell the difference between the RP2350 running this code
-    * and the Z80 it normally writes memory for. But it doesn't seem to avoid the issue
-    * with contention, so I suspect it's not an exact copy of the Z80. I think the RP is
-    * not quite quick enough, perhaps at the start of the loop where it gets the address
-    * on the bus then wait half a clock - that's the point the ULA decides on contention.
-    * 
-    * The contents of this loop takes 800ns per iteration, plus another 50ns for the loop.
-    * At 3.5MHz the 3-cycle write should take 857ns, so that looks right.
-    * 
-    * The problem here is that it's slow. A 6,912 byte screen contents DMA takes 5.92ms
-    * which is way slower than I'd like and nowhere near fast enough for top border time.
-    */
 
     /* Wait for rising edge of clock, syncs to start of T1 (Z80 manual fig 6, right side) */
     while( gpio_get( GPIO_Z80_CLK ) == 0 );  
@@ -323,7 +310,17 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
   else if( mode == DMA_MODE_TOP_BORDER )
   {
     /* Blipper goes low while DMA process is active */
-    gpio_put( GPIO_BLIPPER1, 0 );
+  //  gpio_put( GPIO_BLIPPER1, 0 );
+
+    /*
+     * DMA into lower, contended memory, ignoring contention. This can only be used
+     * when the Z80 program passes in flags saying it's in top border time. It is,
+     * therefore, the Z80 program's responsibility to ensure this only runs when
+     * it's safe to do so.
+     * 
+     * This is the fastest option, running at ULA-speed without worrying about Z80
+     * sync or what the RAS/CAS generation logic ICs are doing.
+     */
 
     uint32_t offset = 0;
     for( uint32_t byte_counter=0; byte_counter < data_block->length; byte_counter++ )
@@ -343,72 +340,73 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
       offset += data_block->incr;
 
       /*
-      * Assert the write line to write it, the ULA responds to this and does
-      * the write into the Spectrum's memory. i.e. the RAS/CAS stuff.
-      */
+       * Assert the write line to write it, the ULA responds to this and does
+       * the write into the Spectrum's memory. i.e. the RAS/CAS stuff.
+       */
       gpio_put( GPIO_Z80_WR, 0 );
 
       /*
-      * The timing theory:
-      * Spectrum RAM is rated 150ns which is 1.5e-07. RP2350 clock speed is
-      * 200,000,000Hz (overclocked), so one clock cycle is 5ns. So that's 30
-      * RP2350 clock cycles in one DRAM transaction time. However, I'm not
-      * driving the chips, the ULA generates the RAS/CAS signals.
-      * 
-      * I don't know the characteristics of the logic devices inside the ULA.
-      * Emprical testing is all I can do, and that suggests that it's faster
-      * than the SN74LSxx logic that drives the upper RAM.
-      * 
-      * I need to support both the original 4116s and the modern static RAM
-      * memory module boards. It turns out the 4116s are slower.
-      * 
-      * Empirical testing shows it needs 37 RP2350 cycles.
-      */
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
+       * The timing theory:
+       * Spectrum RAM is rated 150ns which is 1.5e-07. RP2350 clock speed is
+       * 200,000,000Hz (overclocked), so one clock cycle is 5ns. So that's 30
+       * RP2350 clock cycles in one DRAM transaction time. However, I'm not
+       * driving the chips, the ULA generates the RAS/CAS signals.
+       * 
+       * I don't know the characteristics of the logic devices inside the ULA.
+       * Emprical testing is all I can do, and that suggests that it's faster
+       * than the SN74LSxx logic that drives the upper RAM.
+       * 
+       * I need to support both the original 4116s and the modern static RAM
+       * memory module boards. It turns out the 4116s are slower.
+       * 
+       * Empirical testing shows it needs 37 RP2350 cycles.
+       */
+      {
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
 
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
 
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
 
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
 
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
 
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
 
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-      __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+        __asm volatile ("nop");
 
-      __asm volatile ("nop");
-      __asm volatile ("nop");
-
+        __asm volatile ("nop");
+        __asm volatile ("nop");
+      }
       /* Mirror and buses reset takes ~100ns */
 
       /* Update local mirror to match the ZX RAM */
@@ -424,7 +422,8 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
     /*
      * DMA into upper memory. This 4164 based DRAM is driven by RAS/CAS signals generated by
      * logic chips (as opposed to the ULA which does that job for the lower RAM). This code
-     * needs to run with timings based on what those ICs can manage.
+     * needs to run with timings based on what those ICs can manage. I could stick with the
+     * Z80 timings, since those are guaranteed to work, but I can drive this faster.
      */
 
     /* Blipper goes low while DMA process is active */
@@ -435,10 +434,23 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
     {
       /* Contents of this loop takes 435ns */
       
+      /*
+       * Wait for rising edge of clock, syncs to start of T1 (Z80 manual fig 6, right side).
+       * This isn't syncing to the Z80 in any way, it's just using the CLK to pace itself
+       * so the DRAMs are happy with the timings 
+       */
+      while( gpio_get( GPIO_Z80_CLK ) == 0 ); 
+
       /* Set up of buses takes ~150ns */
 
       /* Set address of ZX byte to write to */
       gpio_put_masked( GPIO_ABUS_BITMASK, (data_block->zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
+
+      /*
+       * Wait for falling edge of clock, halfway through T1, this step appears necessary
+       * to pace the DRAMs, otherwise the DMA is unreliable
+       */
+      while( gpio_get( GPIO_Z80_CLK ) == 1 ); 
 
       /* Assert memory request */
       gpio_put( GPIO_Z80_MREQ, 0 );
@@ -478,7 +490,7 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
       * chips in the sequence, and there's a bit of time after these NOPs while
       * the local mirror is updated and the WR and MREQ lines are pulled inactive. 
       * Emprical testing shows it's (apparently) 100% reliable with 250ns worth
-      * of NOPs at this point.
+      * of NOPs at this point, but I'm inclined to go with the theory.
       * 
       * That's the call then, at 200MHz 55 NOPs is 275ns, so 55 NOPs here.
       * 
@@ -552,6 +564,116 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
       __asm volatile ("nop");
       __asm volatile ("nop");
       __asm volatile ("nop");
+
+
+
+#if 0
+
+// @FIXME All these make no difference to my current issues but I'll keep them in for now
+  /*
+   * Added to try to fix missing status bug...
+*/
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+#endif      
       }
 
       /* Mirror and buses reset takes ~100ns */

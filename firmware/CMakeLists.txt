@@ -20,6 +20,7 @@ dma_engine.c
 cmd.c
 cmd_immediate.c
 z80_test_image.c
+trace_table.c
 )
 
 pico_generate_pio_header(zx_copro ${CMAKE_CURRENT_LIST_DIR}/int_unsafe.pio)
