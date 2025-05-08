@@ -57,6 +57,31 @@ typedef struct _dma_block
   struct _dma_block* next_ptr; // Pointer to next one of these
 } DMA_BLOCK;
 
+  /*
+   * Modes: (visible externally so the tracing can track it)
+   *
+   * contended means 0x4000 to 0x7FFF on the fly. The DMA can happen at the speed the
+   * ULA can drive RAS/CAS, but the transfer needs to respect memory contention. That
+   * means mimicking the Z80 exactly (i.e. stopping when the Z80 clock stops, etc).
+   * This mode doesn't work. 
+   * 
+   * top border means 0x4000 to 0x7FFF, but the Z80 program guarantees the DMA is
+   * happening in top border time. That means there can't be contention and the code
+   * here doesn't need to use Z80 timings. This is the fastest mode, it runs as fast
+   * as the ULA can drive RAS/CAS.
+   * 
+   * uncontended means 0x8000 to 0xFFFF. This is simple and reliable, no contention
+   * to worry about. But the DMA needs to run at the speed the 74-series logic chips
+   * can drive the 4164s at, which is slower than the ULA drives the 4116s.
+   */
+  typedef enum
+  {
+    DMA_MODE_CONTENDED,
+    DMA_MODE_TOP_BORDER,
+    DMA_MODE_UNCONTENDED
+  }
+  DMA_MODE;
+
 /*
  * In theory a DMA could fill the Z80 memory space. Not sure why
  * anyone would want to.

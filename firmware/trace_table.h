@@ -23,10 +23,12 @@
 #include <stdint.h>
 #include "zx_copro.h"
 #include "cmd.h"
+#include "dma_engine.h"
 
 void trace_table_new_entry(  void );
 void trace_table_set_cmd_args(  const ZXCOPRO_CMD cmd, const uint8_t flags );
 void trace_table_set_dma_args(  const uint8_t *src, const ZX_ADDR zx_ram_location, const uint32_t length );
+void trace_table_set_dma_mode(  const DMA_MODE dma_mode );
 void trace_table_set_status(  const ZXCOPRO_STATUS status );
 void trace_table_set_error(  const ZXCOPRO_STATUS error );
 

@@ -21,7 +21,7 @@ void main(void)
   MEMSET_INIT(memset_cmd);
 
   uint32_t check_counter = 0;
-  uint8_t  c_value = 0;
+  uint8_t  c_value = 0x08;
   srand( 1000 );
   while(1)
   {
@@ -30,9 +30,8 @@ void main(void)
 
 //  uint16_t dest_addr = 0x4000;            // Lower RAM, contended, screen
 //  uint16_t dest_addr = 0x5A00;            // Lower RAM, contended, attributes
-//  uint16_t dest_addr = 0x5B00;            // Lower RAM, contended, printer buffer, max length of 256 bytes
-                                            // Doesn't work, not sure why
-    uint16_t dest_addr = 0xC000;            // Upper RAM, not contended, above code, below stack
+    uint16_t dest_addr = 0x5B00;            // Lower RAM, contended, printer buffer, max length of 256 bytes
+//  uint16_t dest_addr = 0xD000;            // Upper RAM, not contended, above code, below stack
 
     CMD_CLEAR_STATUS(memset_cmd);
     CMD_CLEAR_ERROR(memset_cmd);
@@ -42,7 +41,7 @@ void main(void)
     MEMSET_SET_LENGTH(memset_cmd,length);
 
 #if 0
-    printf("\x16\x01\x01" "Check %ld, %02X times %d bytes?\n", check_counter, c_value, length);
+    printf(/*"\x16\x01\x01"*/ "Check %ld, %02X times %d bytes?\n", check_counter, c_value, length);
 
     printf("%02X %02X %02X %02X  %02X %02X  %02X  %02X %02X\n",
 	   memset_cmd[0],memset_cmd[1],memset_cmd[2],memset_cmd[3],
@@ -75,9 +74,12 @@ void main(void)
 	       while(1);
       }
     }
+
 #if 0
-    printf("Check %ld, %02X times %d bytes OK!\n", check_counter++, c_value++, length);
+    printf("Check %ld, %02X times %d bytes OK!\n", check_counter++, c_value, length);
 #endif
-//    z80_delay_ms(1000);
+
+    c_value++;
+
   }
 }

@@ -1,0 +1,44 @@
+contended_trace[12].png is a trace from when the contended writes
+were working.
+
+Yellow is blipper, low indicating the DMA is ongoing
+Cyan is MREQ
+Purple is WR
+Blue is CLK
+
+The DMA starts and the address (the printer buffer in this case,
+so contended memory) is put on the address bus. The ULA spots
+this and stops the clock - see blue line.
+
+The ULA reads from the memory to build the screen data. When it's
+done it releases the clock.
+
+The RP2350 sees the clock go high again, waits one full Z80 cycle
+(which might be unavoidable) then pulls MREQ and then WR low. The
+RP's one byte is written into memory.
+
+The RP then puts the next address on the address bus, the ULA
+spots it, and stops the Z80 clock.... Etc
+
+So the flat areas of the CLK are where the ULA is driving the buses
+to read the memory for video data, and the spiky bits are when the
+ULA has released the CLK and the RP is driving the buses.
+
+The flat and spiky bits are the same width, which seems to suggest
+the ULA can read a byte in the same time as the RP writes a byte.
+So that's probably peak performance, so nothing to gain from
+optimising the RP code.
+
+
+A 256 byte DMA transfer into contended memory takes 420us, worst
+case. It varies, it depends if the transfer coincides with the
+border (in which case it's faster).
+
+A 256 byte DMA transfer into non-contended memory takes about 150us,
+and it's consistent. So much faster, driving through those logic
+ICs that generate RAS/CAS.
+
+As an experiment, I forced a 256 DMA into non-contended memory to
+use the contended code path. So it was running at Z80 speed, but
+never being stopped by the ULA. That took a consistent 300us. So
+about 28% slower.

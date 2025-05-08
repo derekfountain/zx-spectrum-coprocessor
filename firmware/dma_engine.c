@@ -30,6 +30,7 @@
 #include "hardware/pio.h"
 #include "hardware/dma.h"
 #include "int_unsafe.pio.h"
+#include "trace_table.h"
 
 /* DMA queue */
 typedef struct _DMA_QUEUE_ENTRY
@@ -60,6 +61,9 @@ void activate_dma_queue_entry( void )
   if( dma_queue[0].src != NULL )
   {
     DMA_BLOCK block = { dma_queue[0].src, dma_queue[0].zx_ram_location, dma_queue[0].length, 1 };
+
+    trace_table_new_entry();
+    trace_table_set_dma_args( block.src, block.zx_ram_location, block.length );
 
     dma_memory_block( &block, true );
 
@@ -119,31 +123,6 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
   if( data_block->incr > MAX_INCR )
     return DMA_STATUS_BAD_INCR;
 
-  /*
-   * Modes:
-   *
-   * contended means 0x4000 to 0x7FFF on the fly. The DMA can happen at the speed the
-   * ULA can drive RAS/CAS, but the transfer needs to respect memory contention. That
-   * means mimicking the Z80 exactly (i.e. stopping when the Z80 clock stops, etc).
-   * This mode doesn't work. 
-   * 
-   * top border means 0x4000 to 0x7FFF, but the Z80 program guarantees the DMA is
-   * happening in top border time. That means there can't be contention and the code
-   * here doesn't need to use Z80 timings. This is the fastest mode, it runs as fast
-   * as the ULA can drive RAS/CAS.
-   * 
-   * uncontended means 0x8000 to 0xFFFF. This is simple and reliable, no contention
-   * to worry about. But the DMA needs to run at the speed the 74-series logic chips
-   * can drive the 4164s at, which is slower than the ULA drives the 4116s.
-   */
-  typedef enum
-  {
-    DMA_MODE_CONTENDED,
-    DMA_MODE_TOP_BORDER,
-    DMA_MODE_UNCONTENDED
-  }
-  DMA_MODE;
-
   /* The mode to use is worked out with heuristics */
   DMA_MODE mode;
 
@@ -152,9 +131,9 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
    * end as well on the basis that it's possible to do a large transfer across the ROM space.
    * i.e. start in upper RAM or ROM, end in screen memory, is technically possible
    */ 
-  if( (data_block->zx_ram_location >= 0x4000 && data_block->zx_ram_location <= 0x7FFF)
+  if( ((data_block->zx_ram_location >= 0x4000) && (data_block->zx_ram_location <= 0x7FFF))
       ||
-      (data_block->zx_ram_location+data_block->length >= 0x4000 && data_block->zx_ram_location+data_block->length <= 0x7FFF) )
+      ((data_block->zx_ram_location+data_block->length >= 0x4000) && (data_block->zx_ram_location+data_block->length <= 0x7FFF)) )
   {
     /* Contended memory, but if it's confirmed as running in top border time that's OK as long as it's small */
     if( data_block->top_border_time == true )
@@ -187,6 +166,8 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
     /* Upper RAM (or possibly ROM), there is no contention so it's simple */
     mode = DMA_MODE_UNCONTENDED;
   }
+
+  trace_table_set_dma_mode( mode );
 
   /*
    * The Spectrum can't afford to miss an interrupt, so if one is approaching,
@@ -236,7 +217,7 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
   if( mode == DMA_MODE_CONTENDED )
   {
     /* Blipper goes low while DMA process is active */
-    //gpio_put( GPIO_BLIPPER1, 0 );
+    gpio_put( GPIO_BLIPPER1, 0 );
 
     /*
      * We're DMAing into contended memory. In theory, as long as this code matches
@@ -267,7 +248,63 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
       /* Set address of ZX byte to write to */
       gpio_put_masked( GPIO_ABUS_BITMASK, (data_block->zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
 
-      /* Wait for falling edge of clock, that's halfway through T1 */
+      /*
+       * If the ULA is going to call contention when it sees this address, it will do it inside 
+       * half a Z80 clock cycle - that's 143ns. So pause for half a clock. This takes us to
+       * just past halfway through T1, CLK will now be low either because things are progressing
+       * as normal, or because the ULA has pulled the CLK low to stop it..
+       */
+      {
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      __asm volatile ("nop");
+      }
+
+      /*
+       * The clock is now low. If it's low because things are progressing normally it's time to
+       * put MREQ and the data on the buses; but if the clock is low because the ULA is holding
+       * it, I need to wait until the ULA is done. As far as I can tell, there's no way I can
+       * differentiate these situtation, so I have to wait for the clock to cycle high again.
+       * That guarantees the clock isn't low because the ULA is holding it.
+       */
+      while( gpio_get( GPIO_Z80_CLK ) == 0 );
+
+      /*
+       * The clock is now high again, either because a wasted cycle has passed, or the ULA has
+       * released it from contention. Either way, when I detect the falling edge it's time
+       * to continue the DMA byte transfer. We're at the falling edge halfway through T1.
+       */
       while( gpio_get( GPIO_Z80_CLK ) == 1 );  
 
       /* Assert memory request */
@@ -427,7 +464,7 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
      */
 
     /* Blipper goes low while DMA process is active */
-    gpio_put( GPIO_BLIPPER1, 0 );
+    //gpio_put( GPIO_BLIPPER1, 0 );
 
     uint32_t offset = 0;
     for( uint32_t byte_counter=0; byte_counter < data_block->length; byte_counter++ )

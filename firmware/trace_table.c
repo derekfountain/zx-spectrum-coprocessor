@@ -20,6 +20,7 @@
 #include "trace_table.h"
 #include "dma_engine.h"
 #include "cmd.h"
+#include "dma_engine.h"
 
 #define NUM_TRACE_TABLE_ENTRIES   1024
 
@@ -43,9 +44,11 @@ typedef struct _TRACE_TABLE_ENTRY
   ZXCOPRO_CMD    cmd;
   uint8_t        flags;
 
-  uint8_t       *src;
+  uint8_t        src[3];
   ZX_ADDR        zx_ram_location;
   uint32_t       length;
+
+  DMA_MODE       dma_mode;
 
   ZXCOPRO_STATUS zxcopro_status;
   ZXCOPRO_STATUS zxcopro_error;
@@ -79,7 +82,9 @@ void trace_table_set_cmd_args( const ZXCOPRO_CMD cmd, const uint8_t flags )
 
 void trace_table_set_dma_args( const uint8_t *src, const ZX_ADDR zx_ram_location, const uint32_t length )
 {
-  trace_table[current_entry_index].src             = (uint8_t*)src;
+  trace_table[current_entry_index].src[0]          = *((uint8_t*)src);
+  trace_table[current_entry_index].src[1]          = *((uint8_t*)(src+1));
+  trace_table[current_entry_index].src[2]          = *((uint8_t*)(src+1));
   trace_table[current_entry_index].zx_ram_location = zx_ram_location;
   trace_table[current_entry_index].length          = length;
 
@@ -100,3 +105,8 @@ void trace_table_set_error( const ZXCOPRO_STATUS error )
   trace_table[current_entry_index].entry_status    |= TRACE_TABLE_ZXCOPRO_ERROR_SET;
 }
 
+void trace_table_set_dma_mode(  const DMA_MODE dma_mode )
+{
+  trace_table[current_entry_index].dma_mode        = dma_mode;
+
+}
