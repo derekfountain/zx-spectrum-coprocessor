@@ -32,13 +32,17 @@ optimising the RP code.
 
 A 256 byte DMA transfer into contended memory takes 420us, worst
 case. It varies, it depends if the transfer coincides with the
-border (in which case it's faster).
+border (in which case it's faster). 609,523 bytes/sec.
 
 A 256 byte DMA transfer into non-contended memory takes about 150us,
 and it's consistent. So much faster, driving through those logic
-ICs that generate RAS/CAS.
+ICs that generate RAS/CAS. 1,706,666 bytes/sec.
 
 As an experiment, I forced a 256 DMA into non-contended memory to
 use the contended code path. So it was running at Z80 speed, but
 never being stopped by the ULA. That took a consistent 300us. So
 about 28% slower.
+
+A 256 byte DMA transfer into contended memory with the top border
+flag set takes about 97us, and it's consistent. So that's fastest.
+2,639,175 bytes/sec.

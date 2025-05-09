@@ -217,7 +217,7 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
   if( mode == DMA_MODE_CONTENDED )
   {
     /* Blipper goes low while DMA process is active */
-    gpio_put( GPIO_BLIPPER1, 0 );
+    //gpio_put( GPIO_BLIPPER1, 0 );
 
     /*
      * We're DMAing into contended memory. In theory, as long as this code matches
@@ -347,7 +347,7 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
   else if( mode == DMA_MODE_TOP_BORDER )
   {
     /* Blipper goes low while DMA process is active */
-  //  gpio_put( GPIO_BLIPPER1, 0 );
+    //gpio_put( GPIO_BLIPPER1, 0 );
 
     /*
      * DMA into lower, contended memory, ignoring contention. This can only be used
@@ -356,16 +356,15 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
      * it's safe to do so.
      * 
      * This is the fastest option, running at ULA-speed without worrying about Z80
-     * sync or what the RAS/CAS generation logic ICs are doing.
+     * sync or what the RAS/CAS generation logic ICs are doing. It uses timings
+     * based on a sequence of NOPs, like the uncontended mode, but it drives the
+     * ULA into making the RAS/CAS signals, not the standalone logic ICs. The ULA
+     * appears to run faster than those ICS.
      */
 
     uint32_t offset = 0;
     for( uint32_t byte_counter=0; byte_counter < data_block->length; byte_counter++ )
     {
-      /* Contents of this loop takes 435ns */
-      
-      /* Set up of buses takes ~150ns */
-
       /* Set address of ZX byte to write to */
       gpio_put_masked( GPIO_ABUS_BITMASK, (data_block->zx_ram_location+byte_counter)<<GPIO_ABUS_A0 );
 
@@ -469,8 +468,6 @@ DMA_STATUS dma_memory_block( const DMA_BLOCK *data_block,
     uint32_t offset = 0;
     for( uint32_t byte_counter=0; byte_counter < data_block->length; byte_counter++ )
     {
-      /* Contents of this loop takes 435ns */
-      
       /*
        * Wait for rising edge of clock, syncs to start of T1 (Z80 manual fig 6, right side).
        * This isn't syncing to the Z80 in any way, it's just using the CLK to pace itself

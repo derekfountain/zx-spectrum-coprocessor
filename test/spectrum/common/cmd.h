@@ -27,6 +27,13 @@ typedef enum
 }
 CMD_ERROR;
 
+typedef enum
+{
+  CMD_FLAG_IGNORE_INT = 0x01,     // Z80 program isn't worried about interrupts (probably DI'ed)
+  CMD_FLAG_TOP_BORDER = 0x02,     // Z80 program is running this DMA in top border time
+}
+CMD_FLAGS;
+
 #define ZXCOPRO_NONE         (uint8_t)0
 #define ZXCOPRO_OK           (uint8_t)1
 #define ZXCOPRO_ERROR        (uint8_t)2
@@ -42,9 +49,9 @@ CMD_ERROR;
 #define CMD_QUERY_COPRO_ERROR(NAME) (NAME[3])
 
 /* Initialise structure for a memset */
-#define MEMSET_INIT(NAME) static uint8_t NAME[] =	   \
+#define MEMSET_INIT(NAME,FLAGS) static uint8_t NAME[] =	   \
 {                                                          \
-ZXCOPRO_MEMSET_SMALL, 0,   /* CMD type and flags */	   \
+ZXCOPRO_MEMSET_SMALL, FLAGS,   /* CMD type and flags */	   \
 0, 0,                      /* Status and error */	   \
                                                            \
 0x00, 0x00,                /* zx_addr to set memory at */  \

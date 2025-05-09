@@ -18,7 +18,7 @@ void main(void)
 {
   ioctl(1, IOCTL_OTERM_PAUSE, 0);
 
-  MEMSET_INIT(memset_cmd);
+  MEMSET_INIT(memset_cmd,0);
 
   uint32_t check_counter = 0;
   uint8_t  c_value = 0x08;
